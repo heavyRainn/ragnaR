@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-radar-bg font-sans text-cmc-text antialiased;
+}
+
+@layer components {
+  .terminal-panel {
+    @apply rounded-lg border border-radar-border bg-radar-card shadow-terminal;
+  }
+
+  .terminal-panel-hover {
+    @apply transition-shadow duration-200 hover:border-radar-border hover:shadow-terminal-hover;
+  }
+
+  .section-label {
+    @apply font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-radar-muted;
+  }
+}

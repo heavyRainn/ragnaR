@@ -1,0 +1,52 @@
+from datetime import datetime
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict
+
+
+class AssetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    cmc_id: int | None
+    symbol: str
+    name: str
+    slug: str | None
+    rank: int | None
+    category: str | None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class MarketSnapshotOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    asset_id: int
+    price: Decimal
+    volume_24h: Decimal
+    market_cap: Decimal | None
+    percent_change_1h: Decimal | None
+    percent_change_24h: Decimal | None
+    percent_change_7d: Decimal | None
+    cmc_rank: int | None
+    captured_at: datetime
+
+
+from app.schemas.narrative import NarrativeOut
+from app.schemas.score import ScoreBreakdownOut
+from app.schemas.signal import SignalOut
+
+
+class AssetDetailOut(BaseModel):
+    asset: AssetOut
+    latest_snapshot: MarketSnapshotOut | None
+    recent_signals: list[SignalOut]
+    signal_timeline: list[SignalOut]
+    anomaly_score: int
+    score_breakdown: ScoreBreakdownOut
+    narrative: NarrativeOut
+
+
+AssetDetailOut.model_rebuild()

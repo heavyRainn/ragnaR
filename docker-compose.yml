@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: radar_postgres
+    environment:
+      POSTGRES_DB: radar_db
+      POSTGRES_USER: radar_user
+      POSTGRES_PASSWORD: radar_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U radar_user -d radar_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: radar_backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://radar_user:radar_password@postgres:5432/radar_db
+      SEED_ON_STARTUP: "true"
+      CMC_API_KEY: ${CMC_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    container_name: radar_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
