@@ -16,6 +16,7 @@ class SignalOut(BaseModel):
     reason_json: dict[str, Any]
     metric_snapshot_json: dict[str, Any] | None
     created_at: datetime
+    updated_at: datetime
     asset_symbol: str | None = None
     asset_name: str | None = None
     feed_description: str | None = None

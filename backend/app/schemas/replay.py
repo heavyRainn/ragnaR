@@ -14,3 +14,9 @@ class ReplayPointOut(BaseModel):
     anomaly_score: int
     signals: list[SignalOut]
     narrative: NarrativeOut
+
+
+class ReplayOut(BaseModel):
+    points: list[ReplayPointOut]
+    snapshot_count: int
+    required_snapshot_count: int

@@ -42,8 +42,8 @@ function ReplayPageContent() {
     api
       .getReplay(symbol)
       .then((data) => {
-        setPoints(data);
-        setIndex(Math.max(0, data.length - 1));
+        setPoints(data.points);
+        setIndex(Math.max(0, data.points.length - 1));
         setError(null);
       })
       .catch((e) => setError(e.message))

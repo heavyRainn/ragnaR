@@ -6,6 +6,7 @@ NarrativeType = Literal[
     "ACCUMULATION",
     "MOMENTUM_EXPANSION",
     "VOLATILITY_EVENT",
+    "VOLUME_ANOMALY",
     "MIXED_SIGNAL",
     "NORMAL",
 ]
@@ -39,8 +40,15 @@ NARRATIVE_COPY: dict[str, dict[str, str]] = {
             "for a complete picture of market behavior."
         ),
     },
+    "VOLUME_ANOMALY": {
+        "title": "Volume anomaly detected",
+        "description": (
+            "Trading volume is significantly above its recent baseline without "
+            "a matching price shock. Elevated participation may precede further movement."
+        ),
+    },
     "NORMAL": {
-        "title": "Normal market conditions",
+        "title": "No active anomalies detected",
         "description": "No significant anomalies detected. Metrics within expected baseline ranges.",
     },
 }

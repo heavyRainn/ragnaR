@@ -9,13 +9,14 @@ from app.schemas.asset import AssetDetailOut, AssetOut, MarketSnapshotOut
 from app.schemas.score import ScoreBreakdownOut
 from app.schemas.signal import SignalOut
 from app.services.narrative_service import classify_narrative
-from app.services.refresh_service import refresh_market_data
 from app.services.signal_service import (
     get_active_signals_for_asset,
     get_anomaly_score,
     get_score_breakdown,
     get_signal_timeline,
 )
+from app.signals.common import MIN_SNAPSHOTS
+from app.signals.helpers import count_snapshots
 
 router = APIRouter(prefix="/api/assets", tags=["assets"])
 
@@ -27,8 +28,6 @@ def list_assets(db: Session = Depends(get_db)) -> list[Asset]:
 
 @router.get("/{symbol}", response_model=AssetDetailOut)
 def get_asset(symbol: str, db: Session = Depends(get_db)) -> AssetDetailOut:
-    refresh_market_data(db)
-
     asset = db.execute(select(Asset).where(Asset.symbol == symbol.upper())).scalar_one_or_none()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
@@ -52,4 +51,6 @@ def get_asset(symbol: str, db: Session = Depends(get_db)) -> AssetDetailOut:
         anomaly_score=get_anomaly_score(db, asset.id),
         score_breakdown=ScoreBreakdownOut(total_score=total_score, components=components),
         narrative=classify_narrative(recent_signals),
+        snapshot_count=count_snapshots(db, asset.id),
+        required_snapshot_count=MIN_SNAPSHOTS,
     )

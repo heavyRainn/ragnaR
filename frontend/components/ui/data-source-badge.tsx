@@ -25,7 +25,9 @@ export function DataSourceBadge() {
       )}
       title={status.message}
     >
-      {isLive ? "LIVE DATA · CoinMarketCap" : "MOCK DATA · Seeded snapshots"}
+      {isLive
+        ? `LIVE DATA · CoinMarketCap · Top ${status.cmc_listings_limit ?? 50}`
+        : "MOCK DATA · Seeded snapshots"}
     </span>
   );
 }

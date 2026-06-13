@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
@@ -5,46 +7,75 @@ from app.models.asset import Asset
 from app.models.signal import Signal
 from app.signals.common import severity_from_score
 from app.signals.composite_score import compute_composite_score
-from app.signals.price_shock import evaluate_price_shock
-from app.signals.quiet_accumulation import evaluate_quiet_accumulation
-from app.signals.volume_shock import evaluate_volume_shock
+from app.signals.evaluator import evaluate_asset_candidates
+
+SIGNAL_TYPES = ("volume_shock", "price_shock", "quiet_accumulation")
 
 
-def evaluate_asset_signals(db: Session, asset: Asset) -> list[Signal]:
-    signals: list[Signal] = []
+def _get_active_signal(db: Session, asset_id: int, signal_type: str) -> Signal | None:
+    return db.execute(
+        select(Signal)
+        .where(
+            Signal.asset_id == asset_id,
+            Signal.signal_type == signal_type,
+            Signal.status == "active",
+        )
+        .order_by(desc(Signal.created_at))
+        .limit(1)
+    ).scalar_one_or_none()
 
-    volume_signal = evaluate_volume_shock(db, asset)
-    if volume_signal:
-        signals.append(volume_signal)
 
-    price_signal = evaluate_price_shock(db, asset)
-    if price_signal:
-        signals.append(price_signal)
-
-    quiet_signal = evaluate_quiet_accumulation(db, asset)
-    if quiet_signal:
-        signals.append(quiet_signal)
-
-    return signals
+def resolve_active_signals_for_asset(db: Session, asset_id: int) -> None:
+    now = datetime.now(timezone.utc)
+    active = db.execute(
+        select(Signal).where(Signal.asset_id == asset_id, Signal.status == "active")
+    ).scalars().all()
+    for signal in active:
+        signal.status = "resolved"
+        signal.updated_at = now
 
 
 def refresh_signals(db: Session) -> list[Signal]:
-    db.execute(
-        Signal.__table__.update()
-        .where(Signal.status == "active")
-        .values(status="superseded")
-    )
-
+    now = datetime.now(timezone.utc)
     assets = db.execute(select(Asset).where(Asset.is_active.is_(True))).scalars().all()
-    new_signals: list[Signal] = []
+    touched: list[Signal] = []
 
     for asset in assets:
-        for signal in evaluate_asset_signals(db, asset):
-            db.add(signal)
-            new_signals.append(signal)
+        evaluation = evaluate_asset_candidates(db, asset)
+
+        for signal_type in SIGNAL_TYPES:
+            candidate = evaluation[signal_type]
+            existing = _get_active_signal(db, asset.id, signal_type)
+
+            if candidate.get("triggered"):
+                if existing:
+                    existing.score = candidate["score"]
+                    existing.severity = candidate["severity"]
+                    existing.reason_json = candidate["reason_json"]
+                    existing.metric_snapshot_json = candidate.get("metric_snapshot_json")
+                    existing.updated_at = now
+                    touched.append(existing)
+                else:
+                    signal = Signal(
+                        asset_id=asset.id,
+                        signal_type=signal_type,
+                        score=candidate["score"],
+                        severity=candidate["severity"],
+                        status="active",
+                        reason_json=candidate["reason_json"],
+                        metric_snapshot_json=candidate.get("metric_snapshot_json"),
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    db.add(signal)
+                    touched.append(signal)
+            elif existing:
+                existing.status = "resolved"
+                existing.updated_at = now
+                touched.append(existing)
 
     db.commit()
-    return new_signals
+    return touched
 
 
 def get_active_signals_for_asset(db: Session, asset_id: int) -> list[Signal]:
@@ -64,7 +95,7 @@ def get_signal_timeline(db: Session, asset_id: int, limit: int = 20) -> list[Sig
         db.execute(
             select(Signal)
             .where(Signal.asset_id == asset_id)
-            .order_by(desc(Signal.created_at))
+            .order_by(desc(Signal.updated_at), desc(Signal.created_at))
             .limit(limit)
         )
         .scalars()
@@ -81,8 +112,7 @@ def get_top_signal_for_asset(db: Session, asset_id: int) -> Signal | None:
 
 def get_score_breakdown(db: Session, asset_id: int) -> tuple[int, dict[str, int]]:
     active = get_active_signals_for_asset(db, asset_id)
-    total, components = compute_composite_score(active)
-    return total, components
+    return compute_composite_score(active)
 
 
 def get_anomaly_score(db: Session, asset_id: int) -> int:
@@ -97,6 +127,8 @@ def get_composite_severity(db: Session, asset_id: int) -> str:
 
 def extract_volume_ratio(active_signals: list[Signal]) -> float | None:
     for signal in active_signals:
+        if signal.status != "active":
+            continue
         ratio = signal.reason_json.get("volume_ratio")
         if ratio is not None:
             return float(ratio)

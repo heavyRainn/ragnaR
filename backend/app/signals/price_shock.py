@@ -1,136 +1,69 @@
-import statistics
-
-from sqlalchemy import desc, select
-from sqlalchemy.orm import Session
-
-from app.models.asset import Asset
 from app.models.market_snapshot import MarketSnapshot
-from app.models.signal import Signal
-from app.signals.common import (
-    BASELINE_SNAPSHOT_COUNT,
-    MIN_BASELINE_SNAPSHOTS,
-    severity_from_score,
-)
-
-PRICE_SHOCK_THRESHOLD = 2.0
+from app.signals.common import PRICE_SHOCK_THRESHOLD, severity_from_score
+from app.signals.helpers import metric_snapshot_from
 
 
 def compute_price_shock_score(price_z_score: float) -> int:
-    return min(100, int(abs(price_z_score) / 5 * 100))
+    return min(100, round(max(0, abs(price_z_score) - PRICE_SHOCK_THRESHOLD) * 20 + 40))
 
 
-def get_return_baseline_from_snapshots(
-    baseline_snapshots: list[MarketSnapshot],
-) -> tuple[float, float] | None:
-    returns = [
-        float(s.percent_change_24h)
-        for s in baseline_snapshots
-        if s.percent_change_24h is not None
-    ]
+def evaluate_price_shock_candidate(
+    latest: MarketSnapshot | None,
+    snapshot_count: int,
+    price_metrics: dict,
+) -> dict:
+    if not latest:
+        return {"triggered": False, "skip_reason": "no_latest_snapshot"}
 
-    if len(returns) < MIN_BASELINE_SNAPSHOTS:
-        return None
+    skip = price_metrics.get("skip_reason")
+    z_score = price_metrics.get("price_z_score")
 
-    mean_return = statistics.mean(returns)
-    std_return = statistics.pstdev(returns)
+    if skip and z_score is None:
+        return {"triggered": False, "skip_reason": skip}
 
-    if std_return == 0:
-        return None
+    if z_score is None or abs(z_score) < PRICE_SHOCK_THRESHOLD:
+        return {"triggered": False, "skip_reason": skip or "below_threshold"}
 
-    return mean_return, std_return
+    current_return = price_metrics["current_return"]
+    mean_return = price_metrics["baseline_mean_return"]
+    std_return = price_metrics["baseline_std_return"]
 
-
-def get_return_baseline(db: Session, asset_id: int) -> tuple[float, float] | None:
-    snapshots = (
-        db.execute(
-            select(MarketSnapshot)
-            .where(MarketSnapshot.asset_id == asset_id)
-            .order_by(desc(MarketSnapshot.captured_at))
-            .offset(1)
-            .limit(BASELINE_SNAPSHOT_COUNT)
-        )
-        .scalars()
-        .all()
-    )
-    return get_return_baseline_from_snapshots(snapshots)
-
-
-def evaluate_price_shock(db: Session, asset: Asset) -> Signal | None:
-    latest = db.execute(
-        select(MarketSnapshot)
-        .where(MarketSnapshot.asset_id == asset.id)
-        .order_by(desc(MarketSnapshot.captured_at))
-        .limit(1)
-    ).scalar_one_or_none()
-
-    if not latest or latest.percent_change_24h is None:
-        return None
-
-    baseline = get_return_baseline(db, asset.id)
-    if baseline is None:
-        return None
-
-    mean_return, std_return = baseline
-    current_return = float(latest.percent_change_24h)
-    price_z_score = (current_return - mean_return) / std_return
-
-    if abs(price_z_score) < PRICE_SHOCK_THRESHOLD:
-        return None
-
-    score = compute_price_shock_score(price_z_score)
-    severity = severity_from_score(score)
-
+    score = compute_price_shock_score(z_score)
     reason = {
-        "current_return_24h": round(current_return, 4),
-        "mean_return_baseline": round(mean_return, 4),
-        "std_return_baseline": round(std_return, 4),
-        "price_z_score": round(price_z_score, 4),
+        "current_return": round(current_return, 6),
+        "baseline_mean_return": round(mean_return, 6),
+        "baseline_std_return": round(std_return, 6),
+        "price_z_score": round(z_score, 4),
         "threshold": PRICE_SHOCK_THRESHOLD,
+        "snapshot_count": snapshot_count,
     }
 
-    return Signal(
-        asset_id=asset.id,
-        signal_type="price_shock",
-        score=score,
-        severity=severity,
-        status="active",
-        reason_json=reason,
-        metric_snapshot_json={
-            "price": float(latest.price),
-            "volume_24h": float(latest.volume_24h),
-            "percent_change_24h": current_return,
-        },
-    )
+    return {
+        "triggered": True,
+        "signal_type": "price_shock",
+        "score": score,
+        "severity": severity_from_score(score),
+        "reason_json": reason,
+        "metric_snapshot_json": metric_snapshot_from(latest),
+        "skip_reason": None,
+    }
 
 
 def evaluate_price_shock_snapshots(
     latest: MarketSnapshot,
     baseline_snapshots: list[MarketSnapshot],
+    snapshot_count: int,
 ) -> dict | None:
-    if latest.percent_change_24h is None:
+    from app.signals.helpers import compute_price_metrics
+
+    chronological = baseline_snapshots + [latest]
+    metrics = compute_price_metrics(chronological, snapshot_count)
+    result = evaluate_price_shock_candidate(latest, snapshot_count, metrics)
+    if not result.get("triggered"):
         return None
-
-    baseline = get_return_baseline_from_snapshots(baseline_snapshots)
-    if baseline is None:
-        return None
-
-    mean_return, std_return = baseline
-    current_return = float(latest.percent_change_24h)
-    price_z_score = (current_return - mean_return) / std_return
-
-    if abs(price_z_score) < PRICE_SHOCK_THRESHOLD:
-        return None
-
-    score = compute_price_shock_score(price_z_score)
     return {
-        "signal_type": "price_shock",
-        "score": score,
-        "severity": severity_from_score(score),
-        "reason_json": {
-            "current_return_24h": round(current_return, 4),
-            "mean_return_baseline": round(mean_return, 4),
-            "std_return_baseline": round(std_return, 4),
-            "price_z_score": round(price_z_score, 4),
-            "threshold": PRICE_SHOCK_THRESHOLD,
-        },
+        "signal_type": result["signal_type"],
+        "score": result["score"],
+        "severity": result["severity"],
+        "reason_json": result["reason_json"],
     }

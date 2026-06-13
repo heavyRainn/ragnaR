@@ -1,18 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { HistoryWarmup } from "@/components/asset/history-warmup";
+import { CurrentStatus } from "@/components/asset/current-status";
+import { EnhancedNarrativeCard } from "@/components/asset/enhanced-narrative-card";
+import { KeyFindings } from "@/components/asset/key-findings";
+import { SignalExplanations } from "@/components/asset/signal-explanations";
+import { WhatChanged } from "@/components/asset/what-changed";
+import { WhyFlagged } from "@/components/asset/why-flagged";
 import { PriceChart } from "@/components/charts/price-chart";
 import { ReplayScoreChart } from "@/components/charts/replay-score-chart";
 import { VolumeChart } from "@/components/charts/volume-chart";
-import { NarrativeBlock } from "@/components/radar/narrative-block";
 import { ScoreBreakdownCard } from "@/components/radar/score-breakdown";
 import { ScoreDisplay } from "@/components/radar/score-display";
 import { SignalTimeline } from "@/components/radar/signal-timeline";
 import { Card, CardContent } from "@/components/ui/card";
 import { LiveSyncBadge } from "@/components/ui/live-sync-badge";
-import { api, type AssetDetail, type MarketSnapshot, type ReplayPoint } from "@/lib/api";
+import { buildAssetExplanationContext } from "@/lib/asset-explanations";
+import { api, type AssetDetail, type MarketSnapshot, type ReplayPoint, type SystemStatus } from "@/lib/api";
+import { REQUIRED_SNAPSHOT_COUNT } from "@/lib/format";
 import {
   formatPercent,
   formatPrice,
@@ -31,6 +39,7 @@ export default function AssetDetailPage() {
   const [detail, setDetail] = useState<AssetDetail | null>(null);
   const [snapshots, setSnapshots] = useState<MarketSnapshot[]>([]);
   const [replayPoints, setReplayPoints] = useState<ReplayPoint[]>([]);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
@@ -39,14 +48,20 @@ export default function AssetDetailPage() {
     async (silent = false) => {
       if (!silent) setLoading(true);
       try {
-        const [assetDetail, snapshotData, replayData] = await Promise.all([
+        const [assetDetail, snapshotData, replayData, status] = await Promise.all([
           api.getAsset(symbol),
           api.getSnapshots(symbol),
-          api.getReplay(symbol).catch(() => [] as ReplayPoint[]),
+          api.getReplay(symbol).catch(() => ({
+            points: [] as ReplayPoint[],
+            snapshot_count: 0,
+            required_snapshot_count: REQUIRED_SNAPSHOT_COUNT,
+          })),
+          api.getSystemStatus().catch(() => null),
         ]);
         setDetail(assetDetail);
         setSnapshots(snapshotData);
-        setReplayPoints(replayData);
+        setReplayPoints(replayData.points);
+        setSystemStatus(status);
         setLastSyncedAt(new Date());
         setError(null);
       } catch (e) {
@@ -64,6 +79,19 @@ export default function AssetDetailPage() {
     return () => clearInterval(id);
   }, [loadData]);
 
+  const explanation = useMemo(
+    () =>
+      detail
+        ? buildAssetExplanationContext(detail, snapshots, replayPoints)
+        : null,
+    [detail, snapshots, replayPoints]
+  );
+
+  const snapshotCount = detail?.snapshot_count ?? snapshots.length;
+  const requiredSnapshots = detail?.required_snapshot_count ?? REQUIRED_SNAPSHOT_COUNT;
+  const isWarmingUp = snapshotCount < requiredSnapshots;
+  const isLiveMode = systemStatus?.data_source === "live";
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center">
@@ -72,7 +100,7 @@ export default function AssetDetailPage() {
     );
   }
 
-  if (error || !detail) {
+  if (error || !detail || !explanation) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-4">
         <p className="text-terminal-red">Error: {error || "Asset not found"}</p>
@@ -103,8 +131,7 @@ export default function AssetDetailPage() {
           </div>
         </div>
 
-        {/* Section 1: Asset Header */}
-        <header className="terminal-panel mb-8 p-6">
+        <header className="terminal-panel mb-6 p-6">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
               <div className="flex flex-wrap items-center gap-3">
@@ -116,38 +143,61 @@ export default function AssetDetailPage() {
                   <span className="font-mono text-sm text-radar-muted">Rank #{detail.asset.rank}</span>
                 )}
               </div>
-              <div className="mt-3">
-                <NarrativeBlock narrative={detail.narrative} variant="compact" />
-              </div>
             </div>
-            <ScoreDisplay score={detail.anomaly_score} size="xl" />
+            {detail.anomaly_score > 0 ? (
+              <ScoreDisplay score={detail.anomaly_score} size="xl" />
+            ) : (
+              <div className="text-right">
+                <p className="font-mono text-sm font-semibold uppercase tracking-wide text-radar-muted">
+                  No active anomaly
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="mt-6 grid gap-4 border-t border-radar-border pt-6 sm:grid-cols-2 lg:grid-cols-5">
-            <MetricCell label="Price" value={formatPrice(snapshot?.price)} />
+            <MetricCell label="Price" value={formatPrice(snapshot?.price)} prominent />
             <MetricCell
               label="24h Change"
               value={formatPercent(snapshot?.percent_change_24h)}
               valueClass={percentColor(snapshot?.percent_change_24h)}
             />
-            <MetricCell label="Market Cap" value={formatVolume(snapshot?.market_cap)} />
+            <MetricCell label="Market Cap" value={formatVolume(snapshot?.market_cap)} muted />
             <MetricCell label="Volume 24h" value={formatVolume(snapshot?.volume_24h)} />
             <MetricCell
-              label="Composite Score"
-              value={String(detail.anomaly_score)}
-              valueClass={severityFromScore(detail.anomaly_score) === "critical" ? "text-terminal-red" : undefined}
+              label="Radar Score"
+              value={detail.anomaly_score > 0 ? String(detail.anomaly_score) : "No active anomaly"}
+              valueClass={
+                detail.anomaly_score > 0 && severityFromScore(detail.anomaly_score) === "critical"
+                  ? "text-terminal-red"
+                  : detail.anomaly_score === 0
+                    ? "text-radar-muted text-sm"
+                    : undefined
+              }
             />
           </div>
         </header>
 
-        {/* Section 2: Current Narrative */}
-        <section className="mb-8">
-          <h2 className="section-label mb-4">Current Narrative</h2>
-          <NarrativeBlock narrative={detail.narrative} />
-        </section>
+        {isWarmingUp && (
+          <HistoryWarmup
+            snapshotCount={snapshotCount}
+            requiredSnapshotCount={requiredSnapshots}
+            isLiveMode={isLiveMode}
+          />
+        )}
+
+        <CurrentStatus detail={detail} context={explanation} />
+        <WhyFlagged context={explanation} />
 
         <div className="mb-8 grid gap-6 lg:grid-cols-2">
-          {/* Section 3: Score Breakdown */}
+          <KeyFindings context={explanation} />
+          <WhatChanged context={explanation} />
+        </div>
+
+        <EnhancedNarrativeCard context={explanation} />
+        <SignalExplanations context={explanation} />
+
+        <div className="mb-8 grid gap-6 lg:grid-cols-2">
           <section>
             <h2 className="section-label mb-4">Score Breakdown</h2>
             <Card>
@@ -157,7 +207,6 @@ export default function AssetDetailPage() {
             </Card>
           </section>
 
-          {/* Section 4: Signal Timeline */}
           <section>
             <h2 className="section-label mb-4">Signal Timeline</h2>
             <Card>
@@ -168,15 +217,25 @@ export default function AssetDetailPage() {
           </section>
         </div>
 
-        {/* Section 5: Charts */}
         <section>
           <h2 className="section-label mb-4">Market Charts</h2>
+          <p className="mb-4 text-sm text-cmc-muted">
+            Vertical markers show when Radar detected each signal type relative to price and volume.
+          </p>
           <div className="grid gap-6 lg:grid-cols-2">
             <ChartPanel title="Price">
-              <PriceChart snapshots={snapshots} />
+              <PriceChart
+                snapshots={snapshots}
+                markers={explanation.chartMarkers}
+                warmingUp={isWarmingUp && snapshots.length >= 2}
+              />
             </ChartPanel>
             <ChartPanel title="Volume">
-              <VolumeChart snapshots={snapshots} />
+              <VolumeChart
+                snapshots={snapshots}
+                markers={explanation.chartMarkers}
+                warmingUp={isWarmingUp && snapshots.length >= 2}
+              />
             </ChartPanel>
           </div>
           {replayPoints.length > 0 && (
@@ -196,15 +255,26 @@ function MetricCell({
   label,
   value,
   valueClass,
+  prominent,
+  muted,
 }: {
   label: string;
   value: string;
   valueClass?: string;
+  prominent?: boolean;
+  muted?: boolean;
 }) {
   return (
     <div>
       <p className="text-[11px] uppercase tracking-wider text-radar-muted">{label}</p>
-      <p className={cn("mt-1 font-mono text-lg font-semibold tabular-nums text-cmc-text", valueClass)}>
+      <p
+        className={cn(
+          "mt-1 font-mono tabular-nums",
+          prominent ? "text-xl font-semibold text-white" : "text-lg font-semibold",
+          muted ? "text-radar-muted" : "text-cmc-text",
+          valueClass
+        )}
+      >
         {value}
       </p>
     </div>

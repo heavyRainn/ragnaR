@@ -8,7 +8,6 @@ from app.models.market_snapshot import MarketSnapshot
 from app.schemas.asset import AssetOut
 from app.schemas.radar import RadarItemOut
 from app.services.narrative_service import classify_narrative
-from app.services.refresh_service import refresh_market_data
 from app.services.signal_service import (
     extract_volume_ratio,
     get_active_signals_for_asset,
@@ -22,8 +21,6 @@ router = APIRouter(prefix="/api/radar", tags=["radar"])
 
 @router.get("", response_model=list[RadarItemOut])
 def get_radar(db: Session = Depends(get_db)) -> list[RadarItemOut]:
-    refresh_market_data(db)
-
     assets = (
         db.execute(
             select(Asset)

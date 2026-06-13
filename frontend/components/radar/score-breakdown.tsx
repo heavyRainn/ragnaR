@@ -6,19 +6,21 @@ interface ScoreBreakdownCardProps {
   breakdown: ScoreBreakdown;
 }
 
-const COMPONENT_LABELS: Record<keyof ScoreBreakdown["components"], string> = {
+const COMPONENT_LABELS: Record<string, string> = {
   volume: "Volume Shock",
   price: "Price Shock",
   quiet_accumulation: "Quiet Accumulation",
 };
 
 export function ScoreBreakdownCard({ breakdown }: ScoreBreakdownCardProps) {
-  const entries = Object.entries(breakdown.components) as [
-    keyof ScoreBreakdown["components"],
-    number,
-  ][];
-
+  const entries = Object.entries(breakdown.components).filter(([, value]) => value > 0);
   const totalStyles = scoreStyles(breakdown.total_score);
+
+  if (entries.length === 0) {
+    return (
+      <p className="text-sm text-cmc-muted">No active score contributors.</p>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -27,7 +29,7 @@ export function ScoreBreakdownCard({ breakdown }: ScoreBreakdownCardProps) {
         return (
           <div key={key}>
             <div className="mb-1.5 flex items-center justify-between text-sm">
-              <span className="text-cmc-muted">{COMPONENT_LABELS[key]}</span>
+              <span className="text-cmc-muted">{COMPONENT_LABELS[key] ?? key}</span>
               <span className={cn(styles.text, "font-mono font-semibold tabular-nums")}>
                 {value}
               </span>

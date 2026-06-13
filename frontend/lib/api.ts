@@ -36,6 +36,7 @@ export interface Signal {
   reason_json: Record<string, number>;
   metric_snapshot_json: Record<string, number | null> | null;
   created_at: string;
+  updated_at: string;
   asset_symbol?: string | null;
   asset_name?: string | null;
   feed_description?: string | null;
@@ -43,11 +44,7 @@ export interface Signal {
 
 export interface ScoreBreakdown {
   total_score: number;
-  components: {
-    volume: number;
-    price: number;
-    quiet_accumulation: number;
-  };
+  components: Record<string, number>;
 }
 
 export interface RadarItem {
@@ -71,6 +68,14 @@ export interface AssetDetail {
   anomaly_score: number;
   score_breakdown: ScoreBreakdown;
   narrative: Narrative;
+  snapshot_count: number;
+  required_snapshot_count: number;
+}
+
+export interface ReplayResponse {
+  points: ReplayPoint[];
+  snapshot_count: number;
+  required_snapshot_count: number;
 }
 
 export interface ReplayPoint {
@@ -85,6 +90,9 @@ export interface ReplayPoint {
 export interface SystemStatus {
   data_source: "live" | "mock";
   cmc_api_configured: boolean;
+  cmc_listings_limit: number | null;
+  sync_interval_seconds: number;
+  last_market_sync_at: string | null;
   message: string;
 }
 
@@ -105,5 +113,5 @@ export const api = {
   getAsset: (symbol: string) => fetchApi<AssetDetail>(`/api/assets/${symbol}`),
   getSnapshots: (symbol: string) => fetchApi<MarketSnapshot[]>(`/api/assets/${symbol}/snapshots`),
   getSignals: () => fetchApi<Signal[]>("/api/signals"),
-  getReplay: (symbol: string) => fetchApi<ReplayPoint[]>(`/api/replay/${symbol}`),
+  getReplay: (symbol: string) => fetchApi<ReplayResponse>(`/api/replay/${symbol}`),
 };

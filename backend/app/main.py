@@ -3,24 +3,31 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import assets, radar, replay, signals, snapshots, system
+from app.api.routes import assets, debug, radar, replay, signals, snapshots, system
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.services.market_data_service import sync_from_coinmarketcap
+from app.services.market_data_service import cleanup_mixed_mock_live_history, sync_from_coinmarketcap
+from app.services.refresh_service import refresh_market_data
 from app.services.seed_service import seed_database
+from app.services.sync_scheduler import start_background_sync, stop_background_sync
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    if settings.SEED_ON_STARTUP:
-        db = SessionLocal()
-        try:
+    db = SessionLocal()
+    try:
+        if settings.CMC_API_KEY:
+            cleanup_mixed_mock_live_history(db)
+            sync_from_coinmarketcap(db, force=True)
+        elif settings.SEED_ON_STARTUP:
             seed_database(db)
-            if settings.CMC_API_KEY:
-                sync_from_coinmarketcap(db, force=True)
-        finally:
-            db.close()
+            refresh_market_data(db)
+    finally:
+        db.close()
+
+    await start_background_sync()
     yield
+    await stop_background_sync()
 
 
 app = FastAPI(
@@ -39,6 +46,7 @@ app.add_middleware(
 )
 
 app.include_router(system.router)
+app.include_router(debug.router)
 app.include_router(assets.router)
 app.include_router(snapshots.router)
 app.include_router(signals.router)

@@ -1,159 +1,295 @@
 # Crypto Market Intelligence Radar
 
-Minimal full-stack MVP for explainable crypto market anomaly detection.
+**Детерминированный intelligence-терминал для крипторынка.**  
+Превращает рыночные данные в объяснимые сигналы, narrative и приоритеты — без «чёрного ящика» и без AI, который сам решает, что важно.
 
-## Stack
+> *AI does not decide signals. Deterministic market logic is the source of truth.*
 
-- **Backend:** Python, FastAPI, SQLAlchemy 2, Pydantic v2, Alembic, PostgreSQL, Uvicorn
-- **Frontend:** Next.js, TypeScript, Tailwind CSS, Recharts
-- **Infrastructure:** Docker Compose
+---
 
-## Data Source Modes
+## Проблема
 
-The app supports two explicit data modes. Check `/api/system/status` or the badge on `/radar` to see which mode is active.
+Крипторынок генерирует тысячи метрик в секунду. Трейдер и аналитик видят:
 
-### Mock mode (default)
+- таблицы цен и объёмов;
+- десятки монет с «+2% / −1%»;
+- алерты без контекста.
 
-No CoinMarketCap API key required. Uses seeded snapshots for local development.
+**Не хватает слоя между сырыми данными и решением:** что именно необычно, почему это необычно, насколько это важно и что изменилось относительно нормы.
+
+CoinMarketCap показывает *что* происходит.  
+**Radar показывает *что заслуживает внимания* и *почему*.**
+
+---
+
+## Решение
+
+**Crypto Market Intelligence Radar (CMIR)** — платформа market intelligence, которая:
+
+1. Забирает рыночные данные (CoinMarketCap или mock seed).
+2. Детектирует аномалии **детерминированными правилами** (Volume / Price / Quiet Accumulation).
+3. Считает **Radar Score** и **Narrative** (Accumulation, Momentum Expansion, Volatility Event…).
+4. Объясняет каждый сигнал человеческим языком на странице актива.
+5. Позволяет **перемотать** историю и показать: система увидела аномалию *до* очевидного движения.
+
+```
+Market Data  →  Signal Engine  →  Narrative  →  Action
+     │               │                │              │
+  CMC / Mock    Volume Shock      ACCUMULATION    /radar
+                Price Shock       VOLATILITY      /assets
+                Quiet Accum.      NORMAL          /replay
+```
+
+---
+
+## Демо за 60 секунд (для жюри)
+
+| Шаг | URL | Что показать |
+|-----|-----|--------------|
+| 1 | http://localhost:3000 | Landing: суть продукта, интерактивный radar-фон |
+| 2 | http://localhost:3000/radar | Market Overview → Top Opportunities → Intelligence Feed → таблица |
+| 3 | http://localhost:3000/assets/SOL | Price Shock: Current Status, Why Flagged, What Changed |
+| 4 | http://localhost:3000/assets/LINK | Quiet Accumulation / Accumulation narrative |
+| 5 | http://localhost:3000/replay?symbol=SOL | Слайдер: score и сигналы *до* скачка цены |
+
+**Mock mode** работает без API-ключей — идеально для стенда на хакатоне.
+
+---
+
+## Ключевые возможности
+
+### Market Intelligence Terminal (`/radar`)
+
+- **Market Overview** — KPI: активы, сигналы, avg score, critical count, Market Mode
+- **Top Opportunities** — топ-5 по Radar Score в стиле Bloomberg/Nansen
+- **Intelligence Feed** — лента только **активных** событий
+- **Radar Table** — 50 активов, поиск, фильтры, сортировка; нули скрыты, акцент на аномалиях
+
+### Asset Intelligence Card (`/assets/[symbol]`)
+
+- Current Status — активен ли сигнал прямо сейчас
+- Why Radar Flagged — объяснение с реальными числами (z-score, volume ratio)
+- Key Findings & What Changed — delta score, narrative, volume ratio
+- Score Breakdown — только активные компоненты
+- Charts с маркерами момента появления сигнала
+
+### Signal Replay (`/replay`)
+
+- Timeline slider по историческим snapshot'ам
+- Price, Volume, Score, Signals, Narrative на каждой точке
+- Доказывает ценность продукта: **раннее обнаружение**
+
+---
+
+## Signal Engine
+
+Все сигналы — **правила, не ML**. Минимум **21 snapshot** истории. Lifecycle: `active` → `resolved`. Без дубликатов на каждый sync.
+
+### Volume Shock
+
+Объём 24h существенно выше baseline (20 предыдущих snapshots, без current).
+
+| Условие | `volume_ratio >= 3.0` |
+| Score | `min(100, round(max(0, ratio − 3) × 20 + 40))` |
+| 3.0x → 40 · 5.0x → 80 · 6.0x → 100 |
+
+### Price Shock
+
+Z-score по **returns между snapshots** (не по CMC `percent_change_24h`).
+
+| Условие | `|z_score| >= 3.0`, std >= 0.001 |
+| Score | `min(100, round(max(0, |z| − 3) × 20 + 40))` |
+
+### Quiet Accumulation
+
+Объём растёт, цена остаётся flat.
+
+| Условие | `volume_ratio >= 3.0` AND `|24h %| <= 2.0` |
+
+### Radar Score (Composite)
+
+| Компонент | Вес |
+|-----------|-----|
+| Volume Shock | 0.35 |
+| Price Shock | 0.30 |
+| Quiet Accumulation | 0.35 |
+
+- 0 активных сигналов → score **0**
+- 1 активный → score этого сигнала
+- Несколько → weighted average
+
+### Narrative Engine
+
+| Активные сигналы | Narrative |
+|------------------|-----------|
+| Quiet Accumulation | ACCUMULATION |
+| Volume + Price | MOMENTUM_EXPANSION |
+| Price only | VOLATILITY_EVENT |
+| Volume only | VOLUME_ANOMALY |
+| Нет active | NORMAL |
+
+---
+
+## Архитектура
+
+```mermaid
+flowchart TB
+    subgraph Data
+        CMC[CoinMarketCap API]
+        Mock[Mock Seed 50 assets]
+    end
+
+    subgraph Backend["Backend · FastAPI"]
+        Sync[Background Sync 60s]
+        DB[(PostgreSQL)]
+        SE[Signal Engine]
+        NE[Narrative Engine]
+        Sync --> DB
+        DB --> SE
+        SE --> NE
+    end
+
+    subgraph Frontend["Frontend · Next.js"]
+        Landing[Landing /]
+        Radar[Terminal /radar]
+        Asset[Asset Card /assets]
+        Replay[Replay /replay]
+    end
+
+    CMC --> Sync
+    Mock --> DB
+    NE --> Radar
+    NE --> Asset
+    NE --> Replay
+```
+
+---
+
+## Tech Stack
+
+| Слой | Технологии |
+|------|------------|
+| Backend | Python 3.12, FastAPI, SQLAlchemy 2, Pydantic v2, Alembic |
+| Database | PostgreSQL 16 |
+| Frontend | Next.js 14, TypeScript, Tailwind CSS, Recharts |
+| Infra | Docker Compose |
+| Data | CoinMarketCap `listings/latest` (live) или seeded snapshots (mock) |
+
+---
+
+## Быстрый старт
+
+### 1. Клонировать и настроить
+
+```bash
+cp .env.example .env
+```
+
+### 2. Запустить (mock mode — без ключей)
 
 ```bash
 docker compose up --build
 ```
 
-Dashboard badge: `MOCK DATA · Seeded snapshots`
-
-### Live mode
-
-Add your CoinMarketCap API key to `.env`:
-
-```env
-CMC_API_KEY=your_coinmarketcap_api_key
-```
-
-Get a free key at: https://coinmarketcap.com/api/
-
-After changing `.env`, restart:
-
-```bash
-docker compose down
-docker compose up --build
-```
-
-To fully reset the database and remove old seed data:
+Полный reset БД + seed 50 активов × 25 snapshots:
 
 ```bash
 docker compose down -v
 docker compose up --build
 ```
 
-Dashboard badge: `LIVE DATA · CoinMarketCap`
+### 3. Открыть
 
-## Quick Start
+| Сервис | URL |
+|--------|-----|
+| Landing | http://localhost:3000 |
+| Radar Terminal | http://localhost:3000/radar |
+| Asset (demo) | http://localhost:3000/assets/SOL |
+| Replay | http://localhost:3000/replay |
+| API Docs | http://localhost:8000/docs |
+| Debug Signals | http://localhost:8000/api/debug/signals |
 
-1. Copy environment file:
+---
 
-```bash
-cp .env.example .env
+## Live mode (CoinMarketCap)
+
+Добавьте ключ в `.env`:
+
+```env
+CMC_API_KEY=your_key_here
+CMC_LISTINGS_LIMIT=50
+CMC_SYNC_INTERVAL_SECONDS=60
 ```
 
-2. Start all services (mock mode works out of the box):
+Ключ: https://coinmarketcap.com/api/
 
-```bash
-docker compose up --build
-```
+Badge на dashboard: `LIVE DATA · CoinMarketCap · Top 50`
 
-3. Open the frontend:
+> Один batch-запрос `listings/latest` на sync ≈ 1 credit. Интервал по умолчанию 60s.
 
-- Landing: http://localhost:3000
-- Market Radar: http://localhost:3000/radar
-- Asset detail example: http://localhost:3000/assets/BTC
+---
 
-4. Open backend API docs:
+## API
 
-- Swagger UI: http://localhost:8000/docs
-- Health check: http://localhost:8000/health
+| Method | Endpoint | Описание |
+|--------|----------|----------|
+| GET | `/api/system/status` | Режим data source, sync interval |
+| GET | `/api/radar` | Активы ranked by Radar Score + narrative |
+| GET | `/api/signals` | Только **active** signals |
+| GET | `/api/assets/{symbol}` | Detail + breakdown + timeline |
+| GET | `/api/replay/{symbol}` | Исторический replay |
+| GET | `/api/debug/signals` | Debug: ratios, z-scores, skip_reason |
 
-## API Endpoints
+---
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/system/status` | Data source mode (live / mock) |
-| GET | `/health` | Health check |
-| GET | `/api/assets` | List all assets |
-| GET | `/api/assets/{symbol}` | Asset detail with latest snapshot and signals |
-| GET | `/api/assets/{symbol}/snapshots` | Time-series snapshots |
-| GET | `/api/signals` | Latest active signals |
-| GET | `/api/replay/{symbol}` | Historical replay of scores and signals |
-| GET | `/api/radar` | Assets ranked by composite anomaly score |
-
-## Signal Logic
-
-### Volume Shock
-
-Triggered when `volume_ratio >= 3.0`:
+## Структура проекта
 
 ```
-volume_ratio = current_volume_24h / average_volume_24h_baseline
-score = min(100, int(volume_ratio / 10 * 100))
-```
-
-### Price Shock
-
-Triggered when `abs(price_z_score) >= 2.0`:
-
-```
-price_z_score = (current_return_24h - mean_return_baseline) / std_return_baseline
-score = min(100, int(abs(price_z_score) / 5 * 100))
-```
-
-### Quiet Accumulation
-
-Triggered when volume spikes but price stays flat:
-
-```
-volume_ratio >= 3.0 AND abs(percent_change_24h) <= 2.0
-score = min(100, int(volume_ratio * 15 + max(0, 20 - abs(percent_change_24h) * 5)))
-```
-
-### Composite Anomaly Score
-
-Weighted aggregation of active signal scores (weights normalized when a signal type is absent):
-
-```
-composite = 0.40 * volume + 0.35 * price + 0.25 * quiet_accumulation
-```
-
-Dashboard sorting uses **composite score**. **Main Signal** is the highest-scoring individual active signal.
-
-## Project Structure
-
-```
-crypto-market-intelligence-radar/
-├── backend/          # FastAPI application
-├── frontend/         # Next.js dashboard
+ragnaR/
+├── backend/
+│   ├── app/
+│   │   ├── signals/          # Volume / Price / Quiet + composite
+│   │   ├── services/         # CMC sync, narrative, seed, replay
+│   │   └── api/routes/       # REST endpoints
+│   └── alembic/
+├── frontend/
+│   ├── app/                  # Pages: /, /radar, /assets, /replay
+│   └── components/           # Terminal UI, charts, explanations
 ├── docker-compose.yml
-├── .env.example
-└── README.md
+└── .env.example
 ```
 
-## Seed Data
+---
 
-On first startup, the backend seeds 10 crypto assets (BTC, ETH, SOL, XRP, DOGE, LINK, AVAX, TON, ADA, NEAR) with historical snapshots. Several assets have elevated volume ratios to demonstrate Volume Shock signals on the dashboard.
+## Чем отличаемся
 
-## Market Data (CoinMarketCap)
+| | CoinMarketCap | **CMIR Radar** |
+|---|---------------|----------------|
+| Фокус | Цены и rankings | **Аномалии и приоритеты** |
+| Логика | — | **Детерминированные правила** |
+| Объяснение | — | Why Flagged, Key Findings, Narrative |
+| История | Графики | **Signal Replay** с доказательством раннего детекта |
+| AI | — | **Не используется** для решений о сигналах |
 
-In **live mode**, the backend syncs quotes from CoinMarketCap every ~55 seconds:
+---
 
-- `price`, `volume_24h`, `market_cap`
-- `percent_change_24h` (and 1h / 7d)
-- `cmc_rank`
+## Roadmap
 
-In **mock mode**, the same fields come from seeded snapshots in PostgreSQL.
+- [ ] WebSocket real-time feed
+- [ ] Alerts (Telegram / email)
+- [ ] Portfolio watchlists
+- [ ] Multi-exchange data
+- [ ] Optional LLM layer *поверх* детерминированных сигналов (summarize, not decide)
 
-## Next Steps (not implemented)
+---
 
-- CoinMarketCap API integration ✅ (basic quotes sync)
-- OpenAI explanations
-- WebSocket real-time updates
-- Authentication
-- Celery / Redis background jobs
+## License
+
+MIT — hackathon / MVP build.
+
+---
+
+<p align="center">
+  <strong>Crypto Market Intelligence Radar</strong><br/>
+  Detect unusual crypto market behavior before it becomes obvious.
+</p>

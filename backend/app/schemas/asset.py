@@ -47,6 +47,8 @@ class AssetDetailOut(BaseModel):
     anomaly_score: int
     score_breakdown: ScoreBreakdownOut
     narrative: NarrativeOut
+    snapshot_count: int
+    required_snapshot_count: int
 
 
 AssetDetailOut.model_rebuild()

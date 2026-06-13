@@ -1,11 +1,48 @@
+export const REQUIRED_SNAPSHOT_COUNT = 21;
+
 export function formatPrice(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "—";
   const num = typeof value === "string" ? parseFloat(value) : value;
+  if (!Number.isFinite(num)) return "—";
+
   if (num >= 1000) {
     return `$${num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
-  if (num >= 1) return `$${num.toFixed(2)}`;
-  return `$${num.toFixed(4)}`;
+  if (num >= 1) {
+    return `$${num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  if (num >= 0.01) {
+    return `$${num.toFixed(4)}`;
+  }
+  if (num >= 0.0001) {
+    return `$${num.toFixed(6)}`;
+  }
+
+  const trimmed = num.toFixed(10).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+  if (trimmed === "0" || parseFloat(trimmed) === 0) {
+    return `$${num.toExponential(4)}`;
+  }
+  return `$${trimmed}`;
+}
+
+export function priceChartDomain(prices: number[]): [number, number] {
+  if (prices.length === 0) return [0, 1];
+
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+
+  if (min === max) {
+    const padding = Math.max(Math.abs(min) * 0.01, min * 0.01 || 1e-12);
+    return [min - padding, max + padding];
+  }
+
+  return [min * 0.995, max * 1.005];
+}
+
+export function priceAxisWidth(prices: number[]): number {
+  if (prices.length === 0) return 88;
+  const sample = formatPrice(Math.min(...prices));
+  return Math.min(130, Math.max(88, sample.length * 7 + 12));
 }
 
 export function formatVolume(value: string | number | null | undefined): string {
@@ -129,7 +166,33 @@ export function formatTime(value: string | null | undefined): string {
 }
 
 export function narrativeTypeLabel(type: string): string {
-  return type.replace(/_/g, " ");
+  return type
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+export function percentColorStrong(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return "text-radar-muted";
+  const num = typeof value === "string" ? parseFloat(value) : value;
+  if (num > 0) return "text-terminal-green";
+  if (num < 0) return "text-terminal-red";
+  return "text-radar-muted";
+}
+
+export function rowHighlightClass(score: number): string {
+  if (score <= 0) return "";
+  const severity = severityFromScore(score);
+  switch (severity) {
+    case "critical":
+      return "border-l-2 border-l-terminal-red bg-terminal-red/[0.04] hover:bg-terminal-red/[0.07]";
+    case "significant":
+      return "border-l-2 border-l-terminal-amber bg-terminal-amber/[0.04] hover:bg-terminal-amber/[0.07]";
+    case "watch":
+      return "border-l-2 border-l-terminal-blue bg-terminal-blue/[0.04] hover:bg-terminal-blue/[0.07]";
+    default:
+      return "border-l-2 border-l-terminal-neutral bg-radar-elevated/30 hover:bg-radar-elevated/50";
+  }
 }
 
 export function percentColor(value: string | number | null | undefined): string {

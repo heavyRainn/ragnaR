@@ -7,9 +7,10 @@ from app.schemas.replay import ReplayPointOut
 from app.schemas.signal import SignalOut
 from app.services.narrative_service import classify_narrative_from_types, signal_feed_description
 from app.signals.composite_score import compute_composite_from_components
-from app.signals.price_shock import evaluate_price_shock_snapshots
-from app.signals.quiet_accumulation import evaluate_quiet_accumulation_snapshots
-from app.signals.volume_shock import evaluate_volume_shock_snapshots
+from app.signals.helpers import compute_price_metrics, compute_volume_metrics
+from app.signals.price_shock import evaluate_price_shock_candidate
+from app.signals.quiet_accumulation import evaluate_quiet_accumulation_candidate
+from app.signals.volume_shock import evaluate_volume_shock_candidate
 
 
 def _mock_signal_for_feed(result: dict, asset_id: int, captured_at) -> SignalOut:
@@ -25,6 +26,7 @@ def _mock_signal_for_feed(result: dict, asset_id: int, captured_at) -> SignalOut
         reason_json=result["reason_json"],
         metric_snapshot_json=None,
         created_at=captured_at,
+        updated_at=captured_at,
     )
     return SignalOut(
         id=0,
@@ -36,6 +38,7 @@ def _mock_signal_for_feed(result: dict, asset_id: int, captured_at) -> SignalOut
         reason_json=result["reason_json"],
         metric_snapshot_json=None,
         created_at=captured_at,
+        updated_at=captured_at,
         feed_description=signal_feed_description(mock),
     )
 
@@ -53,37 +56,55 @@ def build_replay_for_asset(db: Session, asset: Asset) -> list[ReplayPointOut]:
 
     points: list[ReplayPointOut] = []
 
-    for index, latest in enumerate(snapshots):
-        baseline = snapshots[max(0, index - 5) : index]
-        if not baseline:
-            points.append(
-                ReplayPointOut(
-                    timestamp=latest.captured_at,
-                    price=latest.price,
-                    volume_24h=latest.volume_24h,
-                    anomaly_score=0,
-                    signals=[],
-                    narrative=classify_narrative_from_types(set()),
-                )
-            )
-            continue
+    for index in range(len(snapshots)):
+        latest = snapshots[index]
+        chronological = snapshots[: index + 1]
+        snapshot_count = len(chronological)
+        baseline = chronological[:-1]
+        baseline_window = baseline[-20:] if len(baseline) > 20 else baseline
+
+        volume_metrics = compute_volume_metrics(latest, baseline_window, snapshot_count)
+        price_metrics = compute_price_metrics(chronological, snapshot_count)
 
         triggered: list[SignalOut] = []
         signal_types: set[str] = set()
-        components = {"volume": 0, "price": 0, "quiet_accumulation": 0}
+        components: dict[str, int] = {}
 
         evaluators = [
-            (evaluate_volume_shock_snapshots, "volume"),
-            (evaluate_price_shock_snapshots, "price"),
-            (evaluate_quiet_accumulation_snapshots, "quiet_accumulation"),
+            (
+                evaluate_volume_shock_candidate(
+                    latest, baseline_window, snapshot_count, volume_metrics
+                ),
+                "volume",
+            ),
+            (
+                evaluate_price_shock_candidate(latest, snapshot_count, price_metrics),
+                "price",
+            ),
+            (
+                evaluate_quiet_accumulation_candidate(
+                    latest, snapshot_count, volume_metrics, price_metrics
+                ),
+                "quiet_accumulation",
+            ),
         ]
 
-        for evaluator, component_key in evaluators:
-            result = evaluator(latest, baseline)
-            if result:
+        for result, component_key in evaluators:
+            if result.get("triggered"):
                 components[component_key] = result["score"]
                 signal_types.add(result["signal_type"])
-                triggered.append(_mock_signal_for_feed(result, asset.id, latest.captured_at))
+                triggered.append(
+                    _mock_signal_for_feed(
+                        {
+                            "signal_type": result["signal_type"],
+                            "score": result["score"],
+                            "severity": result["severity"],
+                            "reason_json": result["reason_json"],
+                        },
+                        asset.id,
+                        latest.captured_at,
+                    )
+                )
 
         anomaly_score = compute_composite_from_components(components)
 
