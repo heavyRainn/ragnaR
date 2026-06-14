@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.session import get_db
 from app.models.asset import Asset
 from app.models.market_snapshot import MarketSnapshot
 from app.schemas.asset import AssetDetailOut, AssetOut, MarketSnapshotOut
 from app.schemas.score import ScoreBreakdownOut
 from app.schemas.signal import SignalOut
+from app.services.asset_access import get_trackable_asset
 from app.services.narrative_service import classify_narrative
 from app.services.signal_service import (
     get_active_signals_for_asset,
@@ -23,14 +25,15 @@ router = APIRouter(prefix="/api/assets", tags=["assets"])
 
 @router.get("", response_model=list[AssetOut])
 def list_assets(db: Session = Depends(get_db)) -> list[Asset]:
-    return db.execute(select(Asset).order_by(Asset.rank.nulls_last(), Asset.symbol)).scalars().all()
+    query = select(Asset)
+    if settings.is_live_data:
+        query = query.where(Asset.is_active.is_(True))
+    return db.execute(query.order_by(Asset.rank.nulls_last(), Asset.symbol)).scalars().all()
 
 
 @router.get("/{symbol}", response_model=AssetDetailOut)
 def get_asset(symbol: str, db: Session = Depends(get_db)) -> AssetDetailOut:
-    asset = db.execute(select(Asset).where(Asset.symbol == symbol.upper())).scalar_one_or_none()
-    if not asset:
-        raise HTTPException(status_code=404, detail="Asset not found")
+    asset = get_trackable_asset(db, symbol)
 
     latest_snapshot = db.execute(
         select(MarketSnapshot)

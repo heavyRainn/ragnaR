@@ -22,5 +22,9 @@ class Settings(BaseSettings):
         # Never sync faster than once per minute — protects CMC credit budget.
         return max(60, raw)
 
+    @property
+    def is_live_data(self) -> bool:
+        return bool(self.CMC_API_KEY and self.CMC_API_KEY.strip())
+
 
 settings = Settings()

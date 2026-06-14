@@ -9,12 +9,12 @@ router = APIRouter(prefix="/api/system", tags=["system"])
 
 @router.get("/status", response_model=SystemStatusOut)
 def get_system_status() -> SystemStatusOut:
-    cmc_configured = bool(settings.CMC_API_KEY and settings.CMC_API_KEY.strip())
+    cmc_configured = settings.is_live_data
     limit = settings.CMC_LISTINGS_LIMIT
     interval = settings.cmc_sync_interval
     last_sync = get_last_market_sync_at()
 
-    if cmc_configured:
+    if settings.is_live_data:
         return SystemStatusOut(
             data_source="live",
             cmc_api_configured=True,

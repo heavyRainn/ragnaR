@@ -46,7 +46,7 @@ def is_seeded(db: Session) -> bool:
 
 
 def seed_database(db: Session) -> None:
-    if settings.CMC_API_KEY:
+    if settings.is_live_data:
         return
     if is_seeded(db):
         return

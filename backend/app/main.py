@@ -16,7 +16,7 @@ from app.services.sync_scheduler import start_background_sync, stop_background_s
 async def lifespan(_: FastAPI):
     db = SessionLocal()
     try:
-        if settings.CMC_API_KEY:
+        if settings.is_live_data:
             cleanup_mixed_mock_live_history(db)
             sync_from_coinmarketcap(db, force=True)
         elif settings.SEED_ON_STARTUP:

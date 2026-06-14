@@ -95,10 +95,31 @@ def _upsert_asset(db: Session, parsed: dict) -> Asset:
     return asset
 
 
-def _sync_from_listings(db: Session, api_key: str) -> int:
+def _deactivate_stale_live_assets(db: Session, synced_asset_ids: set[int]) -> int:
+    """Hide seed/mock assets that are outside the latest CMC listings batch."""
+    if not synced_asset_ids:
+        return 0
+
+    stale = (
+        db.execute(
+            select(Asset).where(Asset.is_active.is_(True), Asset.id.not_in(synced_asset_ids))
+        )
+        .scalars()
+        .all()
+    )
+    for asset in stale:
+        asset.is_active = False
+        resolve_active_signals_for_asset(db, asset.id)
+        logger.info("Deactivated %s — not in latest CMC top-%s sync", asset.symbol, settings.CMC_LISTINGS_LIMIT)
+
+    return len(stale)
+
+
+def _sync_from_listings(db: Session, api_key: str) -> tuple[int, set[int]]:
     limit = settings.CMC_LISTINGS_LIMIT
     raw_listings = fetch_listings_latest(api_key, start=1, limit=limit)
     synced = 0
+    synced_ids: set[int] = set()
     now = datetime.now(timezone.utc)
 
     for entry in raw_listings:
@@ -107,6 +128,7 @@ def _sync_from_listings(db: Session, api_key: str) -> int:
             continue
 
         asset = _upsert_asset(db, parsed)
+        synced_ids.add(asset.id)
         new_price = float(parsed["price"])
         _maybe_reset_before_snapshot(db, asset, new_price)
 
@@ -124,7 +146,11 @@ def _sync_from_listings(db: Session, api_key: str) -> int:
         db.add(snapshot)
         synced += 1
 
-    return synced
+    deactivated = _deactivate_stale_live_assets(db, synced_ids)
+    if deactivated:
+        logger.info("Deactivated %s stale assets outside CMC sync", deactivated)
+
+    return synced, synced_ids
 
 
 def _sync_from_quotes(db: Session, api_key: str) -> int:
@@ -183,7 +209,7 @@ def sync_from_coinmarketcap(db: Session, *, force: bool = False) -> bool:
         return False
 
     try:
-        synced = _sync_from_listings(db, api_key)
+        synced, _ = _sync_from_listings(db, api_key)
     except CoinMarketCapError as exc:
         logger.warning("CoinMarketCap listings sync failed, falling back to quotes: %s", exc)
         try:

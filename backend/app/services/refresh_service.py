@@ -23,7 +23,7 @@ def refresh_market_data(db: Session) -> bool:
     """Refresh market data from CoinMarketCap or bump mock snapshot timestamps."""
     global _last_mock_refresh
 
-    if settings.CMC_API_KEY:
+    if settings.is_live_data:
         return sync_from_coinmarketcap(db)
 
     now = datetime.now(timezone.utc)
