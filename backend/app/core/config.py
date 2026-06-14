@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     # Deprecated alias — falls back when unset in older .env files
     CMC_REFRESH_INTERVAL_SECONDS: int | None = None
 
+    BYBIT_BACKFILL_ENABLED: bool = True
+    BYBIT_BACKFILL_BATCH_SIZE: int = 5
+    BYBIT_BACKFILL_REQUEST_DELAY_MS: int = 250
+    BYBIT_BACKFILL_CANDLE_LIMIT: int = 60
+
     @property
     def cmc_sync_interval(self) -> int:
         if self.CMC_REFRESH_INTERVAL_SECONDS is not None:

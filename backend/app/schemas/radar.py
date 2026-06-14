@@ -17,3 +17,4 @@ class RadarItemOut(BaseModel):
     main_signal: str | None
     volume_ratio: float | None
     narrative: NarrativeOut | None = None
+    move_after_signal_percent: float | None = None

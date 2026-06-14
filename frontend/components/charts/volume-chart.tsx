@@ -18,10 +18,9 @@ import { ChartEmptyState } from "./chart-empty-state";
 interface VolumeChartProps {
   snapshots: MarketSnapshot[];
   markers?: ChartSignalMarker[];
-  warmingUp?: boolean;
 }
 
-export function VolumeChart({ snapshots, markers = [], warmingUp }: VolumeChartProps) {
+export function VolumeChart({ snapshots, markers = [] }: VolumeChartProps) {
   if (snapshots.length < 2) {
     return <ChartEmptyState />;
   }
@@ -35,11 +34,6 @@ export function VolumeChart({ snapshots, markers = [], warmingUp }: VolumeChartP
 
   return (
     <div className="relative h-72 w-full">
-      {warmingUp && (
-        <span className="absolute right-0 top-0 z-10 rounded border border-terminal-amber/30 bg-terminal-amber/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-terminal-amber">
-          Warming up history
-        </span>
-      )}
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 20, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />

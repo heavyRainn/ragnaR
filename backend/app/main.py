@@ -3,12 +3,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import assets, debug, radar, replay, signals, snapshots, system
+from app.api.routes import assets, debug, market_rotation, radar, replay, signals, snapshots, system
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.services.market_data_service import cleanup_mixed_mock_live_history, sync_from_coinmarketcap
 from app.services.refresh_service import refresh_market_data
 from app.services.seed_service import seed_database
+from app.services.sector_mapping import sync_asset_categories
 from app.services.sync_scheduler import start_background_sync, stop_background_sync
 
 
@@ -21,7 +22,8 @@ async def lifespan(_: FastAPI):
             sync_from_coinmarketcap(db, force=True)
         elif settings.SEED_ON_STARTUP:
             seed_database(db)
-            refresh_market_data(db)
+            refresh_market_data(db, force=True)
+        sync_asset_categories(db)
     finally:
         db.close()
 
@@ -52,6 +54,7 @@ app.include_router(snapshots.router)
 app.include_router(signals.router)
 app.include_router(replay.router)
 app.include_router(radar.router)
+app.include_router(market_rotation.router)
 
 
 @app.get("/health")

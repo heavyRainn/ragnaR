@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.asset import Asset
 from app.models.market_snapshot import MarketSnapshot
+from app.services.bybit_backfill_service import backfill_new_assets
 from app.services.cmc_service import (
     CoinMarketCapError,
     fetch_listings_latest,
@@ -15,12 +16,12 @@ from app.services.cmc_service import (
     parse_listing,
     parse_quote,
 )
+from app.services.sector_mapping import resolve_sector
 from app.services.signal_service import refresh_signals, resolve_active_signals_for_asset
+from app.services.sync_state import sync_state
 from app.signals.helpers import compute_returns_from_prices, get_chronological_snapshots
 
 logger = logging.getLogger(__name__)
-
-_last_sync: datetime | None = None
 
 # A single 60s sync interval should not move more than ~15% for top assets.
 SOURCE_MISMATCH_THRESHOLD = 0.15
@@ -78,6 +79,7 @@ def _upsert_asset(db: Session, parsed: dict) -> Asset:
         existing.name = parsed["name"]
         existing.slug = parsed["slug"]
         existing.rank = parsed["rank"]
+        existing.category = resolve_sector(symbol)
         existing.is_active = True
         return existing
 
@@ -87,7 +89,7 @@ def _upsert_asset(db: Session, parsed: dict) -> Asset:
         name=parsed["name"],
         slug=parsed["slug"],
         rank=parsed["rank"],
-        category="cryptocurrency",
+        category=resolve_sector(symbol),
         is_active=True,
     )
     db.add(asset)
@@ -96,7 +98,6 @@ def _upsert_asset(db: Session, parsed: dict) -> Asset:
 
 
 def _deactivate_stale_live_assets(db: Session, synced_asset_ids: set[int]) -> int:
-    """Hide seed/mock assets that are outside the latest CMC listings batch."""
     if not synced_asset_ids:
         return 0
 
@@ -115,6 +116,21 @@ def _deactivate_stale_live_assets(db: Session, synced_asset_ids: set[int]) -> in
     return len(stale)
 
 
+def _insert_snapshot(db: Session, asset: Asset, parsed: dict, captured_at: datetime) -> None:
+    snapshot = MarketSnapshot(
+        asset_id=asset.id,
+        price=parsed["price"],
+        volume_24h=parsed["volume_24h"],
+        market_cap=parsed["market_cap"],
+        percent_change_1h=parsed["percent_change_1h"],
+        percent_change_24h=parsed["percent_change_24h"],
+        percent_change_7d=parsed["percent_change_7d"],
+        cmc_rank=parsed["cmc_rank"],
+        captured_at=captured_at,
+    )
+    db.add(snapshot)
+
+
 def _sync_from_listings(db: Session, api_key: str) -> tuple[int, set[int]]:
     limit = settings.CMC_LISTINGS_LIMIT
     raw_listings = fetch_listings_latest(api_key, start=1, limit=limit)
@@ -131,19 +147,7 @@ def _sync_from_listings(db: Session, api_key: str) -> tuple[int, set[int]]:
         synced_ids.add(asset.id)
         new_price = float(parsed["price"])
         _maybe_reset_before_snapshot(db, asset, new_price)
-
-        snapshot = MarketSnapshot(
-            asset_id=asset.id,
-            price=parsed["price"],
-            volume_24h=parsed["volume_24h"],
-            market_cap=parsed["market_cap"],
-            percent_change_1h=parsed["percent_change_1h"],
-            percent_change_24h=parsed["percent_change_24h"],
-            percent_change_7d=parsed["percent_change_7d"],
-            cmc_rank=parsed["cmc_rank"],
-            captured_at=now,
-        )
-        db.add(snapshot)
+        _insert_snapshot(db, asset, parsed, now)
         synced += 1
 
     deactivated = _deactivate_stale_live_assets(db, synced_ids)
@@ -176,37 +180,33 @@ def _sync_from_quotes(db: Session, api_key: str) -> int:
 
         new_price = float(parsed["price"])
         _maybe_reset_before_snapshot(db, asset, new_price)
-
-        snapshot = MarketSnapshot(
-            asset_id=asset.id,
-            price=parsed["price"],
-            volume_24h=parsed["volume_24h"],
-            market_cap=parsed["market_cap"],
-            percent_change_1h=parsed["percent_change_1h"],
-            percent_change_24h=parsed["percent_change_24h"],
-            percent_change_7d=parsed["percent_change_7d"],
-            cmc_rank=parsed["cmc_rank"],
-            captured_at=now,
-        )
-        db.add(snapshot)
+        _insert_snapshot(db, asset, parsed, now)
         synced += 1
 
     return synced
 
 
 def sync_from_coinmarketcap(db: Session, *, force: bool = False) -> bool:
-    """Fetch live data from CoinMarketCap listings and persist snapshots."""
-    global _last_sync
-
+    """Fetch live data from CoinMarketCap listings and insert new snapshots."""
     api_key = settings.CMC_API_KEY
     if not api_key:
+        sync_state.mark_failed("CMC_API_KEY not configured")
         return False
 
     now = datetime.now(timezone.utc)
     interval = settings.cmc_sync_interval
 
-    if not force and _last_sync and (now - _last_sync).total_seconds() < interval:
+    if (
+        not force
+        and sync_state.last_successful_sync_at
+        and (now - sync_state.last_successful_sync_at).total_seconds() < interval
+    ):
+        sync_state.mark_skipped(f"sync interval not elapsed ({interval}s)")
+        logger.debug("CMC sync skipped — interval not elapsed")
         return False
+
+    sync_state.mark_started("live")
+    logger.info("CMC sync started")
 
     try:
         synced, _ = _sync_from_listings(db, api_key)
@@ -215,21 +215,46 @@ def sync_from_coinmarketcap(db: Session, *, force: bool = False) -> bool:
         try:
             synced = _sync_from_quotes(db, api_key)
         except CoinMarketCapError as quote_exc:
-            logger.warning("CoinMarketCap quotes sync failed: %s", quote_exc)
+            error = f"CoinMarketCap sync failed: {quote_exc}"
+            sync_state.mark_failed(error)
+            logger.error("CMC sync failed: error=%s", quote_exc)
             return False
     except httpx.HTTPError as exc:
-        logger.warning("CoinMarketCap HTTP error: %s", exc)
+        error = f"CoinMarketCap HTTP error: {exc}"
+        sync_state.mark_failed(error)
+        logger.error("CMC sync failed: error=%s", exc)
         return False
 
     if synced == 0:
+        error = "CoinMarketCap returned zero assets"
+        sync_state.mark_failed(error)
+        logger.error("CMC sync failed: error=%s", error)
         return False
 
     db.commit()
-    refresh_signals(db)
-    _last_sync = now
-    logger.info("Synced %s assets from CoinMarketCap (limit=%s)", synced, settings.CMC_LISTINGS_LIMIT)
+
+    touched = refresh_signals(db)
+    signals_count = len(touched)
+
+    backfilled = backfill_new_assets(db)
+    if backfilled > 0:
+        touched = refresh_signals(db)
+        signals_count = len(touched)
+
+    sync_state.mark_success(
+        snapshots_inserted=synced,
+        assets_count=synced,
+        signals_refreshed=signals_count,
+    )
+    logger.info(
+        "CMC sync completed: assets=%s snapshots_inserted=%s signals_refreshed=%s backfilled_assets=%s",
+        synced,
+        synced,
+        signals_count,
+        backfilled,
+    )
     return True
 
 
-def get_last_sync_at() -> datetime | None:
-    return _last_sync
+def get_last_sync_at():
+    return sync_state.last_successful_sync_at

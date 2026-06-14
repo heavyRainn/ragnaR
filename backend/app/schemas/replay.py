@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.schemas.narrative import NarrativeOut
 from app.schemas.signal import SignalOut
+from app.schemas.signal_outcome import ReplayQuickIndicesOut
 
 
 class ReplayPointOut(BaseModel):
@@ -17,6 +18,8 @@ class ReplayPointOut(BaseModel):
 
 
 class ReplayOut(BaseModel):
+    symbol: str
     points: list[ReplayPointOut]
     snapshot_count: int
     required_snapshot_count: int
+    quick_indices: ReplayQuickIndicesOut | None = None

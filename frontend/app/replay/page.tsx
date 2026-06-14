@@ -8,7 +8,7 @@ import { NarrativeBlock } from "@/components/radar/narrative-block";
 import { ScoreDisplay } from "@/components/radar/score-display";
 import { ScoreBadge } from "@/components/radar/score-badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { api, type Asset, type ReplayPoint } from "@/lib/api";
+import { api, type Asset, type ReplayPoint, type ReplayQuickIndices } from "@/lib/api";
 import {
   formatDate,
   formatPercent,
@@ -17,15 +17,27 @@ import {
   formatVolume,
   percentColor,
 } from "@/lib/format";
+import { buildWhatRadarSaw } from "@/lib/replay-explanation";
+import { cn } from "@/lib/utils";
+
+type QuickMode = "before_signal" | "signal_detected" | "current_state";
+
+const QUICK_MODES: { id: QuickMode; label: string }[] = [
+  { id: "before_signal", label: "Before Signal" },
+  { id: "signal_detected", label: "Signal Detected" },
+  { id: "current_state", label: "Current State" },
+];
 
 function ReplayPageContent() {
   const searchParams = useSearchParams();
-  const initialSymbol = searchParams.get("symbol")?.toUpperCase() ?? "BTC";
+  const querySymbol = searchParams.get("symbol")?.toUpperCase() ?? null;
 
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [symbol, setSymbol] = useState(initialSymbol);
+  const [symbol, setSymbol] = useState<string | null>(querySymbol);
   const [points, setPoints] = useState<ReplayPoint[]>([]);
+  const [quickIndices, setQuickIndices] = useState<ReplayQuickIndices | null>(null);
   const [index, setIndex] = useState(0);
+  const [activeMode, setActiveMode] = useState<QuickMode | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,23 +46,52 @@ function ReplayPageContent() {
   }, []);
 
   useEffect(() => {
-    setSymbol(initialSymbol);
-  }, [initialSymbol]);
+    if (querySymbol) {
+      setSymbol(querySymbol);
+      return;
+    }
+    api
+      .getReplayDefaultSymbol()
+      .then((data) => setSymbol(data.symbol))
+      .catch(() => setSymbol("BTC"));
+  }, [querySymbol]);
 
   useEffect(() => {
+    if (!symbol) return;
     setLoading(true);
-    api
-      .getReplay(symbol)
-      .then((data) => {
-        setPoints(data.points);
-        setIndex(Math.max(0, data.points.length - 1));
-        setError(null);
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+    setError(null);
+
+    const loadReplay = async (target: string) => {
+      const data = await api.getReplay(target);
+      setSymbol(data.symbol);
+      setPoints(data.points);
+      setQuickIndices(data.quick_indices);
+      const currentIdx = data.quick_indices?.current_state ?? Math.max(0, data.points.length - 1);
+      setIndex(currentIdx);
+      setActiveMode("current_state");
+    };
+
+    loadReplay(symbol).catch(async () => {
+      try {
+        const fallback = await api.getReplayDefaultSymbol();
+        await loadReplay(fallback.symbol);
+      } catch {
+        try {
+          await loadReplay("BTC");
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Failed to load replay");
+        }
+      }
+    }).finally(() => setLoading(false));
   }, [symbol]);
 
   const current = useMemo(() => points[index] ?? null, [points, index]);
+  const previous = useMemo(() => (index > 0 ? points[index - 1] : null), [points, index]);
+
+  const whatRadarSaw = useMemo(
+    () => (current ? buildWhatRadarSaw(current, previous) : []),
+    [current, previous]
+  );
 
   const priceChange = useMemo(() => {
     if (!current || index === 0) return null;
@@ -60,6 +101,19 @@ function ReplayPageContent() {
     if (prevPrice === 0) return null;
     return ((curr - prevPrice) / prevPrice) * 100;
   }, [current, index, points]);
+
+  function jumpToMode(mode: QuickMode) {
+    if (!quickIndices) return;
+    const target = quickIndices[mode];
+    if (target == null) return;
+    setIndex(target);
+    setActiveMode(mode);
+  }
+
+  const hasQuickModes =
+    quickIndices?.before_signal != null ||
+    quickIndices?.signal_detected != null ||
+    quickIndices?.current_state != null;
 
   return (
     <main className="min-h-screen px-4 py-8 sm:px-8">
@@ -79,11 +133,16 @@ function ReplayPageContent() {
               </p>
             </div>
             <select
-              value={symbol}
+              value={symbol ?? ""}
               onChange={(e) => setSymbol(e.target.value)}
               className="rounded-md border border-radar-border bg-radar-card px-4 py-2.5 font-mono text-sm text-cmc-text shadow-terminal transition-colors hover:border-terminal-blue/30 focus:border-terminal-blue focus:outline-none"
             >
-              {(assets.length > 0 ? assets : [{ symbol, name: symbol } as Asset]).map((asset) => (
+              {(assets.length > 0
+                ? assets
+                : symbol
+                  ? [{ symbol, name: symbol } as Asset]
+                  : []
+              ).map((asset) => (
                 <option key={asset.symbol} value={asset.symbol}>
                   {asset.symbol} — {asset.name}
                 </option>
@@ -95,7 +154,7 @@ function ReplayPageContent() {
         {loading && <p className="text-cmc-muted">Loading replay data...</p>}
         {error && <p className="text-terminal-red">Error: {error}</p>}
 
-        {!loading && !error && points.length === 0 && (
+        {!loading && !error && symbol && points.length === 0 && (
           <p className="text-cmc-muted">No replay data available for {symbol}.</p>
         )}
 
@@ -109,6 +168,34 @@ function ReplayPageContent() {
                 </CardContent>
               </Card>
             </section>
+
+            {hasQuickModes && (
+              <section className="mb-6">
+                <div className="flex flex-wrap gap-2">
+                  {QUICK_MODES.map((mode) => {
+                    const disabled = quickIndices?.[mode.id] == null;
+                    return (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => jumpToMode(mode.id)}
+                        className={cn(
+                          "rounded border px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wide transition-colors",
+                          disabled
+                            ? "cursor-not-allowed border-radar-border/50 text-radar-muted/50"
+                            : activeMode === mode.id
+                              ? "border-terminal-blue bg-terminal-blue/10 text-terminal-blue"
+                              : "border-radar-border text-radar-muted hover:border-terminal-blue/30 hover:text-cmc-text"
+                        )}
+                      >
+                        {mode.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             <section>
               <h2 className="section-label mb-4">Historical Snapshot</h2>
@@ -131,7 +218,10 @@ function ReplayPageContent() {
                     min={0}
                     max={points.length - 1}
                     value={index}
-                    onChange={(e) => setIndex(Number(e.target.value))}
+                    onChange={(e) => {
+                      setIndex(Number(e.target.value));
+                      setActiveMode(null);
+                    }}
                     className="h-2 w-full cursor-pointer appearance-none rounded-full bg-radar-elevated accent-terminal-blue"
                   />
                   <div className="mt-1 flex justify-between font-mono text-[10px] text-radar-muted">
@@ -147,6 +237,17 @@ function ReplayPageContent() {
                       value={priceChange !== null ? formatPercent(priceChange) : "—"}
                       valueClass={priceChange !== null ? percentColor(priceChange) : undefined}
                     />
+                  </div>
+
+                  <div className="mt-8">
+                    <h3 className="section-label mb-3">What Radar Saw</h3>
+                    <div className="rounded-lg border border-radar-border bg-radar-elevated/40 p-4">
+                      <ul className="space-y-2 text-sm text-cmc-text">
+                        {whatRadarSaw.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
 
                   <div className="mt-8">

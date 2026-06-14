@@ -11,6 +11,7 @@ from app.schemas.score import ScoreBreakdownOut
 from app.schemas.signal import SignalOut
 from app.services.asset_access import get_trackable_asset
 from app.services.narrative_service import classify_narrative
+from app.services.signal_outcome_service import compute_signal_outcome
 from app.services.signal_service import (
     get_active_signals_for_asset,
     get_anomaly_score,
@@ -56,4 +57,5 @@ def get_asset(symbol: str, db: Session = Depends(get_db)) -> AssetDetailOut:
         narrative=classify_narrative(recent_signals),
         snapshot_count=count_snapshots(db, asset.id),
         required_snapshot_count=MIN_SNAPSHOTS,
+        signal_outcome=compute_signal_outcome(db, asset.id),
     )

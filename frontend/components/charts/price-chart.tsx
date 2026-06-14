@@ -18,10 +18,9 @@ import { ChartEmptyState } from "./chart-empty-state";
 interface PriceChartProps {
   snapshots: MarketSnapshot[];
   markers?: ChartSignalMarker[];
-  warmingUp?: boolean;
 }
 
-export function PriceChart({ snapshots, markers = [], warmingUp }: PriceChartProps) {
+export function PriceChart({ snapshots, markers = [] }: PriceChartProps) {
   if (snapshots.length < 2) {
     return <ChartEmptyState />;
   }
@@ -39,11 +38,6 @@ export function PriceChart({ snapshots, markers = [], warmingUp }: PriceChartPro
 
   return (
     <div className="relative h-72 w-full">
-      {warmingUp && (
-        <span className="absolute right-0 top-0 z-10 rounded border border-terminal-amber/30 bg-terminal-amber/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-terminal-amber">
-          Warming up history
-        </span>
-      )}
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 20, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />

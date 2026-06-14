@@ -4,6 +4,7 @@ import {
   formatRelativeTime,
   formatSignalType,
   formatDate,
+  formatVolume,
   narrativeTypeLabel,
   severityFromScore,
 } from "@/lib/format";
@@ -32,7 +33,7 @@ export interface AssetExplanationContext {
   keyFindings: string[];
   whatChanged: WhatChangedRow[];
   enhancedNarrative: { title: string; paragraphs: string[] };
-  signalExplanations: { signal: Signal; text: string }[];
+  signalExplanations: { signal: Signal; details: string[] }[];
   chartMarkers: ChartSignalMarker[];
 }
 
@@ -58,6 +59,58 @@ function statusHeadline(score: number, hasActive: boolean): string {
   return "WATCH LIST ACTIVITY";
 }
 
+function asPercentValue(value: number): number {
+  return Math.abs(value) < 2 ? value * 100 : value;
+}
+
+function buildSignalExplanationDetails(signal: Signal): string[] {
+  const reason = signal.reason_json ?? {};
+
+  switch (signal.signal_type) {
+    case "price_shock": {
+      const currentReturn = Number(reason.current_return ?? 0);
+      const meanReturn = Number(reason.baseline_mean_return ?? 0);
+      const stdReturn = Number(reason.baseline_std_return ?? 0);
+      const z = Number(reason.price_z_score ?? 0);
+      const threshold = Number(reason.threshold ?? 3);
+      return [
+        `Current return: ${formatPercent(asPercentValue(currentReturn))}`,
+        `Baseline mean return: ${formatPercent(asPercentValue(meanReturn))}`,
+        `Baseline std: ${(asPercentValue(stdReturn)).toFixed(4)}%`,
+        `Z-score: ${z.toFixed(2)}`,
+        `Threshold: ${threshold}`,
+      ];
+    }
+    case "volume_shock": {
+      const currentVol = reason.current_volume_24h;
+      const baselineVol = reason.baseline_volume_24h;
+      const ratio = Number(reason.volume_ratio ?? 0);
+      const threshold = Number(reason.threshold ?? 3);
+      return [
+        `Current volume: ${formatVolume(currentVol)}`,
+        `Baseline volume: ${formatVolume(baselineVol)}`,
+        `Volume ratio: ${ratio.toFixed(2)}x`,
+        `Threshold: ${threshold}x`,
+      ];
+    }
+    case "quiet_accumulation": {
+      const ratio = Number(reason.volume_ratio ?? 0);
+      const pct = Number(reason.percent_change_24h ?? 0);
+      const volumeThreshold = Number(reason.volume_threshold ?? 3);
+      const flatThreshold = Number(reason.price_flat_threshold ?? 2);
+      return [
+        `Volume ratio: ${ratio.toFixed(2)}x (threshold ${volumeThreshold}x)`,
+        `24h change: ${formatPercent(pct)} (flat threshold ±${flatThreshold}%)`,
+        `Condition: volume elevated while price remains flat`,
+        `Current volume: ${formatVolume(reason.current_volume_24h)}`,
+        `Baseline volume: ${formatVolume(reason.baseline_volume_24h)}`,
+      ];
+    }
+    default:
+      return ["Insufficient metric data for this signal type."];
+  }
+}
+
 function buildWhyFlagged(signal: Signal | null, hasActive: boolean): string[] {
   if (!hasActive || !signal) {
     return [
@@ -66,60 +119,10 @@ function buildWhyFlagged(signal: Signal | null, hasActive: boolean): string[] {
     ];
   }
 
-  const reason = signal.reason_json ?? {};
-
-  switch (signal.signal_type) {
-    case "price_shock": {
-      const z = reason.price_z_score ?? 0;
-      const rawReturn = reason.current_return ?? reason.current_return_24h ?? 0;
-      const currentPct = Math.abs(rawReturn) < 2 ? Number(rawReturn) * 100 : Number(rawReturn);
-      const threshold = reason.threshold ?? 3;
-      return [
-        "Radar detected a statistically unusual price movement.",
-        `The latest price step return of ${formatPercent(currentPct)} moved significantly outside the historical baseline range.`,
-        `The calculated z-score of ${Number(z).toFixed(2)} exceeded the configured threshold of ${threshold}, triggering a Price Shock signal.`,
-        "This means recent price behavior differs from what is normally observed for this asset.",
-      ];
-    }
-    case "volume_shock": {
-      const ratio = reason.volume_ratio ?? 0;
-      const threshold = reason.threshold ?? 3;
-      return [
-        "Radar detected an unusual surge in trading activity.",
-        `Current 24h volume reached ${Number(ratio).toFixed(1)}x the recent baseline average.`,
-        `This exceeded the Volume Shock threshold of ${threshold}x, indicating participation well above normal levels.`,
-        "Elevated volume often precedes or accompanies significant market moves.",
-      ];
-    }
-    case "quiet_accumulation": {
-      const ratio = reason.volume_ratio ?? 0;
-      const pct = reason.percent_change_24h ?? 0;
-      return [
-        "Radar detected rising volume without a matching price move.",
-        `Volume climbed to ${Number(ratio).toFixed(1)}x baseline while the 24h price change stayed near ${formatPercent(pct)}.`,
-        "This Quiet Accumulation pattern can indicate elevated market attention before a visible price move.",
-        "Participants may be positioning while price remains relatively stable.",
-      ];
-    }
-    default:
-      return [
-        "Radar detected a pattern that deviates from recent baseline behavior.",
-        "Multiple market metrics suggest this asset warrants closer attention.",
-      ];
-  }
-}
-
-function buildSignalExplanationText(signal: Signal): string {
-  switch (signal.signal_type) {
-    case "price_shock":
-      return "Price changed more aggressively than expected based on recent market behavior.";
-    case "volume_shock":
-      return "Trading volume increased significantly compared to its recent baseline.";
-    case "quiet_accumulation":
-      return "Volume increased sharply while price remained relatively stable. This pattern can indicate elevated market attention before a visible price move.";
-    default:
-      return "Market behavior deviated from the expected baseline for this asset.";
-  }
+  return [
+    `${formatSignalType(signal.signal_type)} triggered based on measured market metrics:`,
+    ...buildSignalExplanationDetails(signal),
+  ];
 }
 
 function buildEnhancedNarrative(
@@ -388,7 +391,7 @@ export function buildAssetExplanationContext(
     signalExplanations: (hasActiveAnomaly ? detail.recent_signals : detail.signal_timeline.slice(0, 3)).map(
       (signal) => ({
         signal,
-        text: buildSignalExplanationText(signal),
+        details: buildSignalExplanationDetails(signal),
       })
     ),
     chartMarkers: buildChartMarkers(detail.signal_timeline, snapshots),

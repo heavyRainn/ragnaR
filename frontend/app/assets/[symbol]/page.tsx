@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { HistoryWarmup } from "@/components/asset/history-warmup";
 import { CurrentStatus } from "@/components/asset/current-status";
 import { EnhancedNarrativeCard } from "@/components/asset/enhanced-narrative-card";
 import { KeyFindings } from "@/components/asset/key-findings";
 import { SignalExplanations } from "@/components/asset/signal-explanations";
+import { SignalOutcomeCard } from "@/components/asset/signal-outcome";
 import { WhatChanged } from "@/components/asset/what-changed";
 import { WhyFlagged } from "@/components/asset/why-flagged";
 import { PriceChart } from "@/components/charts/price-chart";
@@ -17,7 +17,8 @@ import { ScoreBreakdownCard } from "@/components/radar/score-breakdown";
 import { ScoreDisplay } from "@/components/radar/score-display";
 import { SignalTimeline } from "@/components/radar/signal-timeline";
 import { Card, CardContent } from "@/components/ui/card";
-import { LiveSyncBadge } from "@/components/ui/live-sync-badge";
+import { SnapshotFreshness } from "@/components/asset/snapshot-freshness";
+import { FreshnessSyncBadge } from "@/components/ui/freshness-sync-badge";
 import { buildAssetExplanationContext } from "@/lib/asset-explanations";
 import { api, type AssetDetail, type MarketSnapshot, type ReplayPoint, type SystemStatus } from "@/lib/api";
 import { REQUIRED_SNAPSHOT_COUNT } from "@/lib/format";
@@ -42,27 +43,25 @@ export default function AssetDetailPage() {
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
   const loadData = useCallback(
     async (silent = false) => {
       if (!silent) setLoading(true);
       try {
-        const [assetDetail, snapshotData, replayData, status] = await Promise.all([
+        const [assetDetail, snapshotData, replayData] = await Promise.all([
           api.getAsset(symbol),
           api.getSnapshots(symbol),
           api.getReplay(symbol).catch(() => ({
+            symbol,
             points: [] as ReplayPoint[],
             snapshot_count: 0,
             required_snapshot_count: REQUIRED_SNAPSHOT_COUNT,
+            quick_indices: null,
           })),
-          api.getSystemStatus().catch(() => null),
         ]);
         setDetail(assetDetail);
         setSnapshots(snapshotData);
         setReplayPoints(replayData.points);
-        setSystemStatus(status);
-        setLastSyncedAt(new Date());
         setError(null);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Unknown error");
@@ -75,8 +74,15 @@ export default function AssetDetailPage() {
 
   useEffect(() => {
     loadData(false);
-    const id = setInterval(() => loadData(true), REFRESH_INTERVAL_MS);
-    return () => clearInterval(id);
+    const dataId = setInterval(() => loadData(true), REFRESH_INTERVAL_MS);
+    const statusId = setInterval(() => {
+      api.getSystemStatus().then(setSystemStatus).catch(() => setSystemStatus(null));
+    }, 15_000);
+    api.getSystemStatus().then(setSystemStatus).catch(() => setSystemStatus(null));
+    return () => {
+      clearInterval(dataId);
+      clearInterval(statusId);
+    };
   }, [loadData]);
 
   const explanation = useMemo(
@@ -86,11 +92,6 @@ export default function AssetDetailPage() {
         : null,
     [detail, snapshots, replayPoints]
   );
-
-  const snapshotCount = detail?.snapshot_count ?? snapshots.length;
-  const requiredSnapshots = detail?.required_snapshot_count ?? REQUIRED_SNAPSHOT_COUNT;
-  const isWarmingUp = snapshotCount < requiredSnapshots;
-  const isLiveMode = systemStatus?.data_source === "live";
 
   if (loading) {
     return (
@@ -127,7 +128,11 @@ export default function AssetDetailPage() {
             >
               Signal Replay →
             </Link>
-            <LiveSyncBadge assetCount={1} lastSyncedAt={lastSyncedAt} refreshing={loading && !!detail} />
+            <FreshnessSyncBadge
+              status={systemStatus}
+              assetCount={1}
+              refreshing={loading && !!detail}
+            />
           </div>
         </div>
 
@@ -176,17 +181,14 @@ export default function AssetDetailPage() {
               }
             />
           </div>
+          <SnapshotFreshness
+            capturedAt={snapshot?.captured_at}
+            systemStatus={systemStatus}
+          />
         </header>
 
-        {isWarmingUp && (
-          <HistoryWarmup
-            snapshotCount={snapshotCount}
-            requiredSnapshotCount={requiredSnapshots}
-            isLiveMode={isLiveMode}
-          />
-        )}
-
         <CurrentStatus detail={detail} context={explanation} />
+        {detail.signal_outcome && <SignalOutcomeCard outcome={detail.signal_outcome} />}
         <WhyFlagged context={explanation} />
 
         <div className="mb-8 grid gap-6 lg:grid-cols-2">
@@ -224,18 +226,10 @@ export default function AssetDetailPage() {
           </p>
           <div className="grid gap-6 lg:grid-cols-2">
             <ChartPanel title="Price">
-              <PriceChart
-                snapshots={snapshots}
-                markers={explanation.chartMarkers}
-                warmingUp={isWarmingUp && snapshots.length >= 2}
-              />
+              <PriceChart snapshots={snapshots} markers={explanation.chartMarkers} />
             </ChartPanel>
             <ChartPanel title="Volume">
-              <VolumeChart
-                snapshots={snapshots}
-                markers={explanation.chartMarkers}
-                warmingUp={isWarmingUp && snapshots.length >= 2}
-              />
+              <VolumeChart snapshots={snapshots} markers={explanation.chartMarkers} />
             </ChartPanel>
           </div>
           {replayPoints.length > 0 && (

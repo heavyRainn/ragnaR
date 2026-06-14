@@ -1,13 +1,23 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.session import get_db
 from app.models.signal import Signal
+from app.schemas.recent_events import RecentMarketEventOut
 from app.schemas.signal import SignalOut
 from app.services.narrative_service import signal_feed_description
+from app.services.recent_events_service import build_recent_market_events
 
 router = APIRouter(prefix="/api/signals", tags=["signals"])
+
+
+@router.get("/recent", response_model=list[RecentMarketEventOut])
+def list_recent_market_events(
+    limit: int = Query(default=10, ge=1, le=50),
+    db: Session = Depends(get_db),
+) -> list[RecentMarketEventOut]:
+    return build_recent_market_events(db, limit=limit)
 
 
 @router.get("", response_model=list[SignalOut])

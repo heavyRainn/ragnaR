@@ -37,6 +37,7 @@ class MarketSnapshotOut(BaseModel):
 from app.schemas.narrative import NarrativeOut
 from app.schemas.score import ScoreBreakdownOut
 from app.schemas.signal import SignalOut
+from app.schemas.signal_outcome import SignalOutcomeOut
 
 
 class AssetDetailOut(BaseModel):
@@ -49,6 +50,7 @@ class AssetDetailOut(BaseModel):
     narrative: NarrativeOut
     snapshot_count: int
     required_snapshot_count: int
+    signal_outcome: SignalOutcomeOut | None = None
 
 
 AssetDetailOut.model_rebuild()

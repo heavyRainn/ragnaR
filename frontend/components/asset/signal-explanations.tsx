@@ -14,7 +14,7 @@ export function SignalExplanations({ context }: SignalExplanationsProps) {
     <section className="mb-8">
       <h2 className="section-label mb-4">Signal Explanation</h2>
       <div className="space-y-3">
-        {context.signalExplanations.map(({ signal, text }) => (
+        {context.signalExplanations.map(({ signal, details }) => (
           <Card key={`${signal.id}-${signal.signal_type}`}>
             <CardContent className="py-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -26,7 +26,13 @@ export function SignalExplanations({ context }: SignalExplanationsProps) {
                   <ScoreBadge score={signal.score} severity={signal.severity} />
                 </div>
               </div>
-              <p className="mt-3 text-sm leading-relaxed text-cmc-muted">{text}</p>
+              <ul className="mt-3 space-y-1.5 text-sm text-cmc-muted">
+                {details.map((line) => (
+                  <li key={line} className="font-mono tabular-nums">
+                    {line}
+                  </li>
+                ))}
+              </ul>
             </CardContent>
           </Card>
         ))}

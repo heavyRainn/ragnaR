@@ -47,6 +47,11 @@ export function TopOpportunities({ items }: TopOpportunitiesProps) {
                     <span className={volumeRatioColor(item.volume_ratio)}>
                       {item.volume_ratio !== null ? `${item.volume_ratio.toFixed(1)}x vol` : "—"}
                     </span>
+                    {item.move_after_signal_percent != null && (
+                      <span className={percentColor(item.move_after_signal_percent)}>
+                        After Signal: {formatPercent(item.move_after_signal_percent)}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <ScoreDisplay score={item.anomaly_score} size="lg" />

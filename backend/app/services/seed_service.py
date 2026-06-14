@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.asset import Asset
 from app.models.market_snapshot import MarketSnapshot
+from app.services.sector_mapping import resolve_sector
 from app.services.seed_data import (
     ANCHOR_PRICES,
     SEED_ASSETS,
@@ -62,8 +63,10 @@ def seed_database(db: Session) -> None:
             name=item["name"],
             slug=item["slug"],
             rank=rank,
-            category="cryptocurrency",
+            category=resolve_sector(symbol),
             is_active=True,
+            history_backfill_attempted=True,
+            history_backfilled=True,
         )
         db.add(asset)
         db.flush()

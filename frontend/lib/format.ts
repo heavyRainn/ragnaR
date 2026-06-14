@@ -78,6 +78,7 @@ export function formatRelativeTime(value: string | Date | null | undefined): str
   if (Number.isNaN(date.getTime())) return "—";
 
   const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (diffSec < 0) return "just now";
   if (diffSec < 10) return "just now";
   if (diffSec < 60) return `${diffSec}s ago`;
   const diffMin = Math.floor(diffSec / 60);
@@ -87,6 +88,13 @@ export function formatRelativeTime(value: string | Date | null | undefined): str
   const diffDay = Math.floor(diffHour / 24);
   if (diffDay < 7) return `${diffDay}d ago`;
   return formatDate(date.toISOString());
+}
+
+export function syncAgeSeconds(value: string | Date | null | undefined): number | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
 }
 
 export function formatSignalType(type: string | null | undefined): string {

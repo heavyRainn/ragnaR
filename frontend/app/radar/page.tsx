@@ -2,25 +2,25 @@
 
 import { useMemo, useState } from "react";
 import { AnomalyTable } from "@/components/radar/anomaly-table";
+import { CapitalRotation } from "@/components/radar/capital-rotation";
 import { IntelligenceFeed } from "@/components/radar/intelligence-feed";
 import { MarketOverview } from "@/components/radar/market-overview";
 import { RadarTableControls } from "@/components/radar/radar-table-controls";
+import { RecentMarketEvents } from "@/components/radar/recent-market-events";
 import { TopOpportunities } from "@/components/radar/top-opportunities";
 import { DataSourceBadge } from "@/components/ui/data-source-badge";
-import { LiveSyncBadge } from "@/components/ui/live-sync-badge";
+import { FreshnessSyncBadge } from "@/components/ui/freshness-sync-badge";
 import { api } from "@/lib/api";
 import { usePolling } from "@/lib/hooks/use-polling";
 import { DEFAULT_RADAR_FILTERS, filterAndSortRadarItems } from "@/lib/radar-filters";
 
 export default function RadarPage() {
-  const { data: items, loading, error, lastSyncedAt } = usePolling(() => api.getRadar(), 60_000);
+  const { data: items, loading, error } = usePolling(() => api.getRadar(), 60_000);
   const { data: signals } = usePolling(() => api.getSignals(), 60_000);
-  const { data: systemStatus } = usePolling(() => api.getSystemStatus(), 60_000);
+  const { data: recentEvents } = usePolling(() => api.getRecentMarketEvents(), 60_000);
+  const { data: marketRotation } = usePolling(() => api.getMarketRotation(), 60_000);
+  const { data: systemStatus } = usePolling(() => api.getSystemStatus(), 15_000);
   const [filters, setFilters] = useState(DEFAULT_RADAR_FILTERS);
-
-  const backendSyncedAt = systemStatus?.last_market_sync_at
-    ? new Date(systemStatus.last_market_sync_at)
-    : lastSyncedAt;
 
   const filteredItems = useMemo(
     () => (items ? filterAndSortRadarItems(items, filters) : []),
@@ -42,9 +42,9 @@ export default function RadarPage() {
               Real-time anomaly detection and market narrative across tracked crypto assets.
             </p>
           </div>
-          <LiveSyncBadge
+          <FreshnessSyncBadge
+            status={systemStatus}
             assetCount={items?.length ?? 0}
-            lastSyncedAt={backendSyncedAt}
             refreshing={loading && !!items}
           />
         </header>
@@ -57,7 +57,9 @@ export default function RadarPage() {
         {items && (
           <>
             <MarketOverview items={items} signals={signals ?? []} />
+            {marketRotation && <CapitalRotation data={marketRotation} />}
             <TopOpportunities items={items} />
+            {recentEvents && <RecentMarketEvents events={recentEvents} />}
             <IntelligenceFeed signals={signals ?? []} />
 
             <section className="mt-10">

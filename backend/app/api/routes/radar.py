@@ -8,6 +8,7 @@ from app.models.market_snapshot import MarketSnapshot
 from app.schemas.asset import AssetOut
 from app.schemas.radar import RadarItemOut
 from app.services.narrative_service import classify_narrative
+from app.services.signal_outcome_service import get_move_after_signal_percent
 from app.services.signal_service import (
     extract_volume_ratio,
     get_active_signals_for_asset,
@@ -55,6 +56,7 @@ def get_radar(db: Session = Depends(get_db)) -> list[RadarItemOut]:
                 main_signal=top_signal.signal_type if top_signal else None,
                 volume_ratio=extract_volume_ratio(active_signals),
                 narrative=classify_narrative(active_signals),
+                move_after_signal_percent=get_move_after_signal_percent(db, asset.id),
             )
         )
 
