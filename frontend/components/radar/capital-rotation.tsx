@@ -1,4 +1,7 @@
+"use client";
+
 import type { MarketRotation, SectorRotation } from "@/lib/api";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { formatPercent, scoreStyles } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,34 +31,37 @@ function barSectors(sectors: SectorRotation[]): SectorRotation[] {
 }
 
 export function CapitalRotation({ data }: CapitalRotationProps) {
+  const { t } = useI18n();
   const top = topSectors(data.sectors);
   const bars = barSectors(data.sectors);
   const maxScore = Math.max(...bars.map((s) => s.average_radar_score), 1);
 
   return (
     <section className="mb-8">
-      <h2 className="section-label mb-4">Capital Rotation</h2>
+      <h2 className="section-label mb-4">{t("capitalRotation.title")}</h2>
 
       <Card className="mb-4 border-terminal-blue/20 bg-terminal-blue/[0.03]">
         <CardContent className="py-5">
-          <p className="text-[11px] uppercase tracking-wider text-radar-muted">Market Narrative</p>
+          <p className="text-[11px] uppercase tracking-wider text-radar-muted">
+            {t("capitalRotation.marketNarrative")}
+          </p>
           <p className="mt-2 font-mono text-base font-semibold leading-relaxed text-cmc-text sm:text-lg">
             {data.market_narrative}
           </p>
           <div className="mt-4 flex flex-wrap gap-3 font-mono text-xs text-radar-muted">
             {data.leader_sector && (
               <span className="rounded border border-terminal-green/30 bg-terminal-green/5 px-2 py-1 text-terminal-green">
-                Leader: {data.leader_sector}
+                {t("capitalRotation.leader", { sector: data.leader_sector })}
               </span>
             )}
             {data.lagging_sector && data.lagging_sector !== data.leader_sector && (
               <span className="rounded border border-radar-border px-2 py-1">
-                Lagging: {data.lagging_sector}
+                {t("capitalRotation.lagging", { sector: data.lagging_sector })}
               </span>
             )}
             {data.most_active_sector && (
               <span className="rounded border border-terminal-amber/30 bg-terminal-amber/5 px-2 py-1 text-terminal-amber">
-                Most Active: {data.most_active_sector}
+                {t("capitalRotation.mostActive", { sector: data.most_active_sector })}
               </span>
             )}
           </div>
@@ -65,21 +71,21 @@ export function CapitalRotation({ data }: CapitalRotationProps) {
       <div className="grid gap-4 lg:grid-cols-2">
         <div>
           <h3 className="mb-3 font-mono text-xs uppercase tracking-wider text-radar-muted">
-            Top Sectors
+            {t("capitalRotation.topSectors")}
           </h3>
           <div className="space-y-3">
             {top.map((sector) => (
               <SectorCard key={sector.sector} sector={sector} highlight />
             ))}
             {top.length === 0 && (
-              <p className="text-sm text-cmc-muted">No sector data available.</p>
+              <p className="text-sm text-cmc-muted">{t("capitalRotation.noSectorData")}</p>
             )}
           </div>
         </div>
 
         <div>
           <h3 className="mb-3 font-mono text-xs uppercase tracking-wider text-radar-muted">
-            Sector Radar Score
+            {t("capitalRotation.sectorRadarScore")}
           </h3>
           <Card>
             <CardContent className="space-y-4 py-5">
@@ -101,9 +107,9 @@ export function CapitalRotation({ data }: CapitalRotationProps) {
                       />
                     </div>
                     <div className="mt-1 flex gap-4 font-mono text-[10px] text-radar-muted">
-                      <span>{sector.active_signals_count} signals</span>
-                      <span>{formatPercent(sector.average_24h_change)} 24h</span>
-                      <span>{sector.assets_count} assets</span>
+                      <span>{t("capitalRotation.signalCount", { count: sector.active_signals_count })}</span>
+                      <span>{t("capitalRotation.avgChange", { value: formatPercent(sector.average_24h_change) })}</span>
+                      <span>{t("capitalRotation.assetCount", { count: sector.assets_count })}</span>
                     </div>
                   </div>
                 );
@@ -123,6 +129,7 @@ function SectorCard({
   sector: SectorRotation;
   highlight?: boolean;
 }) {
+  const { t } = useI18n();
   const styles = scoreStyles(Math.round(sector.average_radar_score));
 
   return (
@@ -141,19 +148,19 @@ function SectorCard({
         </div>
         <dl className="mt-3 grid grid-cols-3 gap-2 font-mono text-xs">
           <div>
-            <dt className="text-radar-muted">Avg Score</dt>
+            <dt className="text-radar-muted">{t("capitalRotation.avgScore")}</dt>
             <dd className={cn("mt-0.5 font-semibold tabular-nums", styles.text)}>
               {sector.average_radar_score.toFixed(1)}
             </dd>
           </div>
           <div>
-            <dt className="text-radar-muted">Signals</dt>
+            <dt className="text-radar-muted">{t("capitalRotation.signalsLabel")}</dt>
             <dd className="mt-0.5 font-semibold tabular-nums text-cmc-text">
               {sector.active_signals_count}
             </dd>
           </div>
           <div>
-            <dt className="text-radar-muted">24h</dt>
+            <dt className="text-radar-muted">{t("radar.sortChange")}</dt>
             <dd className="mt-0.5 font-semibold tabular-nums text-cmc-text">
               {formatPercent(sector.average_24h_change)}
             </dd>

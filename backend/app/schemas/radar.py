@@ -11,6 +11,7 @@ class RadarItemOut(BaseModel):
     price: Decimal | None
     volume_24h: Decimal | None
     market_cap: Decimal | None
+    percent_change_1h: Decimal | None
     percent_change_24h: Decimal | None
     anomaly_score: int
     severity: str

@@ -2,6 +2,7 @@
 
 import type { RadarFilters, SeverityFilter, SignalFilter, SortField } from "@/lib/radar-filters";
 import { DEFAULT_RADAR_FILTERS } from "@/lib/radar-filters";
+import { useI18n } from "@/lib/i18n/locale-provider";
 
 interface RadarTableControlsProps {
   filters: RadarFilters;
@@ -19,6 +20,7 @@ export function RadarTableControls({
   totalCount,
   filteredCount,
 }: RadarTableControlsProps) {
+  const { t } = useI18n();
   const set = (patch: Partial<RadarFilters>) => onChange({ ...filters, ...patch });
 
   return (
@@ -26,7 +28,7 @@ export function RadarTableControls({
       <div className="flex flex-wrap items-center gap-3">
         <input
           type="search"
-          placeholder="Search asset or symbol..."
+          placeholder={t("common.searchAsset")}
           value={filters.search}
           onChange={(e) => set({ search: e.target.value })}
           className={`min-w-[200px] flex-1 ${selectClass}`}
@@ -36,40 +38,41 @@ export function RadarTableControls({
           onChange={(e) => set({ signalType: e.target.value as SignalFilter })}
           className={selectClass}
         >
-          <option value="all">All signals</option>
-          <option value="volume_shock">Volume Shock</option>
-          <option value="price_shock">Price Shock</option>
-          <option value="quiet_accumulation">Quiet Accumulation</option>
-          <option value="none">No signal</option>
+          <option value="all">{t("radar.allSignals")}</option>
+          <option value="volume_shock">{t("signals.volume_shock")}</option>
+          <option value="price_shock">{t("signals.price_shock")}</option>
+          <option value="quiet_accumulation">{t("signals.quiet_accumulation")}</option>
+          <option value="none">{t("signals.none")}</option>
         </select>
         <select
           value={filters.severity}
           onChange={(e) => set({ severity: e.target.value as SeverityFilter })}
           className={selectClass}
         >
-          <option value="all">All severity</option>
-          <option value="critical">Critical (80+)</option>
-          <option value="significant">Significant (60–79)</option>
-          <option value="watch">Watch (40–59)</option>
-          <option value="normal">Normal (0–39)</option>
+          <option value="all">{t("severity.all")}</option>
+          <option value="critical">{t("severity.criticalRange")}</option>
+          <option value="significant">{t("severity.significantRange")}</option>
+          <option value="watch">{t("severity.watchRange")}</option>
+          <option value="normal">{t("severity.normalRange")}</option>
         </select>
         <select
           value={filters.sortBy}
           onChange={(e) => set({ sortBy: e.target.value as SortField })}
           className={selectClass}
         >
-          <option value="score">Radar Score</option>
-          <option value="percent_change_24h">24h %</option>
-          <option value="volume_24h">Volume</option>
-          <option value="market_cap">Market Cap</option>
+          <option value="score">{t("radar.sortScore")}</option>
+          <option value="percent_change_1h">{t("radar.sortChange1h")}</option>
+          <option value="percent_change_24h">{t("radar.sortChange")}</option>
+          <option value="volume_24h">{t("radar.sortVolume")}</option>
+          <option value="market_cap">{t("radar.sortMcap")}</option>
         </select>
         <button
           type="button"
           onClick={() => set({ sortDesc: !filters.sortDesc })}
           className={`${selectClass} font-mono text-xs`}
-          title="Toggle sort direction"
+          title={t("radar.toggleSort")}
         >
-          {filters.sortDesc ? "↓ Desc" : "↑ Asc"}
+          {filters.sortDesc ? t("common.desc") : t("common.asc")}
         </button>
         {(filters.search ||
           filters.signalType !== DEFAULT_RADAR_FILTERS.signalType ||
@@ -79,12 +82,12 @@ export function RadarTableControls({
             onClick={() => onChange(DEFAULT_RADAR_FILTERS)}
             className="text-sm text-terminal-blue hover:underline"
           >
-            Reset
+            {t("common.reset")}
           </button>
         )}
       </div>
       <p className="text-xs text-radar-muted">
-        Showing {filteredCount} of {totalCount} assets
+        {t("common.showingOf", { filtered: filteredCount, total: totalCount })}
       </p>
     </div>
   );

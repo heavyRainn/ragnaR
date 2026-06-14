@@ -1,67 +1,120 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ScoreBadge } from "@/components/radar/score-badge";
+import { CryptoBubblesView } from "@/components/assets/crypto-bubbles-view";
 import { DataSourceBadge } from "@/components/ui/data-source-badge";
-import { api, type RadarItem } from "@/lib/api";
-import { formatPercent, formatPrice, formatSignalType, percentColor } from "@/lib/format";
+import { FreshnessSyncBadge } from "@/components/ui/freshness-sync-badge";
+import { api } from "@/lib/api";
+import { isBubbleEligibleItem } from "@/lib/assets-filters";
+import type { BubbleViewMode } from "@/lib/bubble-layout";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { usePolling } from "@/lib/hooks/use-polling";
+import { cn } from "@/lib/utils";
 
 export default function AssetsPage() {
+  const { t } = useI18n();
   const { data: items, loading, error } = usePolling(() => api.getRadar(), 60_000);
+  const { data: signals } = usePolling(() => api.getSignals(), 60_000);
+  const { data: systemStatus } = usePolling(() => api.getSystemStatus(), 15_000);
+  const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState<BubbleViewMode>("24h");
+
+  const viewModes: { id: BubbleViewMode; label: string }[] = [
+    { id: "1h", label: t("assets.view1h") },
+    { id: "24h", label: t("assets.view24h") },
+    { id: "performance", label: t("assets.viewPerf") },
+    { id: "radar", label: t("assets.viewRadar") },
+  ];
+
+  const signalCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const signal of signals ?? []) {
+      const sym = signal.asset_symbol;
+      if (!sym) continue;
+      counts[sym] = (counts[sym] ?? 0) + 1;
+    }
+    return counts;
+  }, [signals]);
+
+  const tradableItems = useMemo(() => {
+    if (!items) return [];
+    return items.filter(isBubbleEligibleItem);
+  }, [items]);
 
   return (
-    <main className="min-h-screen px-4 py-8 sm:px-8">
-      <div className="mx-auto max-w-7xl">
-        <header className="mb-8 border-b border-radar-border pb-6">
-          <h1 className="font-mono text-2xl font-bold text-cmc-text sm:text-3xl">Assets</h1>
-          <div className="mt-3">
+    <main className="min-h-screen bg-radar-bg">
+      <div className="mx-auto max-w-[100%]">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-radar-border px-3 py-3 sm:px-5">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="font-sans text-lg font-bold text-cmc-text sm:text-xl">{t("assets.title")}</h1>
             <DataSourceBadge />
+            <FreshnessSyncBadge
+              status={systemStatus ?? null}
+              assetCount={tradableItems.length}
+              refreshing={loading && !!items}
+            />
           </div>
-          <p className="mt-2 text-sm text-cmc-muted">
-            All tracked crypto assets with latest market metrics and anomaly scores.
-          </p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-md border border-radar-border bg-radar-card/60 p-0.5">
+              {viewModes.map((mode) => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={() => setViewMode(mode.id)}
+                  className={cn(
+                    "rounded px-2.5 py-1 font-sans text-xs font-semibold uppercase tracking-wide transition-colors",
+                    viewMode === mode.id
+                      ? "bg-terminal-blue/20 text-terminal-blue"
+                      : "text-radar-muted hover:text-cmc-text"
+                  )}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+
+            <input
+              type="search"
+              placeholder={t("common.search")}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-[140px] rounded-md border border-radar-border bg-radar-card/60 px-3 py-1.5 font-sans text-sm text-cmc-text placeholder:text-radar-muted focus:border-terminal-blue/50 focus:outline-none sm:w-[180px]"
+            />
+
+            <Link
+              href="/radar"
+              className="hidden font-sans text-xs text-radar-muted hover:text-cmc-text sm:inline"
+            >
+              {t("nav.terminal")} →
+            </Link>
+          </div>
         </header>
 
-        {loading && !items && <p className="text-cmc-muted">Loading assets...</p>}
-        {error && <p className="text-terminal-red">Error: {error}</p>}
+        {loading && !items && (
+          <p className="py-20 text-center text-radar-muted">{t("assets.loading")}</p>
+        )}
+        {error && (
+          <p className="py-8 text-center text-terminal-red">
+            {t("common.error")}: {error}
+          </p>
+        )}
 
-        {items && (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {items.map((item) => (
-              <AssetCard key={item.asset.id} item={item} />
-            ))}
-          </div>
+        {tradableItems.length > 0 && (
+          <CryptoBubblesView
+            items={tradableItems}
+            search={search}
+            viewMode={viewMode}
+            showSectors={false}
+            signalCounts={signalCounts}
+          />
+        )}
+
+        {items && tradableItems.length === 0 && !loading && (
+          <p className="py-20 text-center text-radar-muted">{t("assets.noTradable")}</p>
         )}
       </div>
     </main>
-  );
-}
-
-function AssetCard({ item }: { item: RadarItem }) {
-  return (
-    <Link href={`/assets/${item.asset.symbol}`}>
-      <article className="terminal-panel terminal-panel-hover flex flex-col gap-3 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h2 className="font-medium text-cmc-text">{item.asset.name}</h2>
-            <p className="font-mono text-xs text-radar-muted">
-              {item.asset.symbol}
-              {item.asset.rank ? ` · #${item.asset.rank}` : ""}
-            </p>
-          </div>
-          <ScoreBadge score={item.anomaly_score} severity={item.severity} />
-        </div>
-        <div className="flex items-center justify-between font-mono text-sm">
-          <span className="text-cmc-text">{formatPrice(item.price)}</span>
-          <span className={percentColor(item.percent_change_24h)}>
-            {formatPercent(item.percent_change_24h)}
-          </span>
-        </div>
-        {item.main_signal && (
-          <p className="text-xs text-radar-muted">{formatSignalType(item.main_signal)}</p>
-        )}
-      </article>
-    </Link>
   );
 }

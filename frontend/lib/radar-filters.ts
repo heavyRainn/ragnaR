@@ -10,7 +10,7 @@ export type SignalFilter =
 
 export type SeverityFilter = "all" | "normal" | "watch" | "significant" | "critical";
 
-export type SortField = "score" | "percent_change_24h" | "volume_24h" | "market_cap";
+export type SortField = "score" | "percent_change_1h" | "percent_change_24h" | "volume_24h" | "market_cap";
 
 export interface RadarFilters {
   search: string;
@@ -65,6 +65,10 @@ export function filterAndSortRadarItems(
 
   result.sort((a, b) => {
     switch (filters.sortBy) {
+      case "percent_change_1h":
+        return (
+          (parseNum(a.percent_change_1h) - parseNum(b.percent_change_1h)) * dir
+        );
       case "percent_change_24h":
         return (
           (parseNum(a.percent_change_24h) - parseNum(b.percent_change_24h)) * dir

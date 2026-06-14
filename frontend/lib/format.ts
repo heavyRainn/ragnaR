@@ -1,4 +1,4 @@
-export const REQUIRED_SNAPSHOT_COUNT = 21;
+export const REQUIRED_SNAPSHOT_COUNT = 15;
 
 export function formatPrice(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "—";

@@ -1,6 +1,6 @@
 "use client";
 
-import { formatRelativeTime } from "@/lib/format";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { useMinuteTick } from "@/lib/hooks/use-minute-tick";
 
 interface LiveSyncBadgeProps {
@@ -11,6 +11,7 @@ interface LiveSyncBadgeProps {
 
 export function LiveSyncBadge({ assetCount, lastSyncedAt, refreshing }: LiveSyncBadgeProps) {
   useMinuteTick();
+  const { t, formatRelativeTime } = useI18n();
 
   return (
     <div className="flex items-center gap-3 rounded border border-radar-border bg-radar-card px-4 py-2 font-mono text-xs">
@@ -18,7 +19,7 @@ export function LiveSyncBadge({ assetCount, lastSyncedAt, refreshing }: LiveSync
         <span
           className={`inline-block h-2 w-2 rounded-full ${refreshing ? "animate-pulse bg-cmc-up" : "bg-cmc-up"}`}
         />
-        <span className="font-semibold text-cmc-up">LIVE</span>
+        <span className="font-semibold text-cmc-up">{t("freshness.live")}</span>
       </span>
       <span className="text-radar-muted">·</span>
       <span className="text-white">{assetCount} assets</span>
@@ -26,7 +27,7 @@ export function LiveSyncBadge({ assetCount, lastSyncedAt, refreshing }: LiveSync
         <>
           <span className="text-radar-muted">·</span>
           <span className="text-radar-muted">
-            Synced {formatRelativeTime(lastSyncedAt.toISOString())}
+            {t("common.synced", { time: formatRelativeTime(lastSyncedAt.toISOString()) })}
           </span>
         </>
       )}

@@ -42,7 +42,7 @@ def fetch_listings_latest(
     api_key: str,
     *,
     start: int = 1,
-    limit: int = 50,
+    limit: int = 100,
     convert: str = "USD",
 ) -> list[dict[str, Any]]:
     response = httpx.get(

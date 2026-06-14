@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import type { RadarItem } from "@/lib/api";
+import { AssetIdentity } from "@/components/ui/asset-identity";
 import {
   formatPercent,
   formatPrice,
@@ -7,6 +10,7 @@ import {
   percentColorStrong,
   rowHighlightClass,
 } from "@/lib/format";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { cn } from "@/lib/utils";
 import { ScoreBadge } from "./score-badge";
 import { StatusBadge } from "./status-badge";
@@ -16,18 +20,21 @@ interface AnomalyTableProps {
 }
 
 export function AnomalyTable({ items }: AnomalyTableProps) {
+  const { t } = useI18n();
+
   return (
     <div className="overflow-x-auto rounded-lg border border-radar-border bg-radar-card shadow-terminal">
-      <table className="w-full min-w-[880px] text-left text-sm">
+      <table className="w-full min-w-[960px] text-left text-sm">
         <thead className="border-b border-radar-border bg-radar-elevated/50 text-[11px] uppercase tracking-wider text-radar-muted">
           <tr>
-            <th className="px-4 py-2.5 font-medium">Asset</th>
-            <th className="px-4 py-2.5 text-right font-medium">Price</th>
-            <th className="px-4 py-2.5 text-right font-medium">24h %</th>
-            <th className="px-4 py-2.5 text-right font-medium">Volume 24h</th>
-            <th className="px-4 py-2.5 text-right font-medium">Market Cap</th>
-            <th className="px-4 py-2.5 text-center font-medium">Radar Score</th>
-            <th className="px-4 py-2.5 font-medium">Status</th>
+            <th className="px-4 py-2.5 font-medium">{t("radar.tableAsset")}</th>
+            <th className="px-4 py-2.5 text-right font-medium">{t("radar.tablePrice")}</th>
+            <th className="px-4 py-2.5 text-right font-medium">{t("radar.tableChange1h")}</th>
+            <th className="px-4 py-2.5 text-right font-medium">{t("radar.tableChange24h")}</th>
+            <th className="px-4 py-2.5 text-right font-medium">{t("radar.tableVolume")}</th>
+            <th className="px-4 py-2.5 text-right font-medium">{t("radar.tableMcap")}</th>
+            <th className="px-4 py-2.5 text-center font-medium">{t("radar.tableScore")}</th>
+            <th className="px-4 py-2.5 font-medium">{t("radar.tableStatus")}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-radar-border/60">
@@ -42,17 +49,26 @@ export function AnomalyTable({ items }: AnomalyTableProps) {
                 )}
               >
                 <td className="px-4 py-2.5">
-                  <Link href={`/assets/${item.asset.symbol}`} className="group block min-w-[120px]">
-                    <span className="block text-[15px] font-medium leading-snug text-cmc-text group-hover:text-terminal-blue">
-                      {item.asset.name}
-                    </span>
-                    <span className="mt-0.5 block font-mono text-[10px] uppercase tracking-wide text-radar-muted/70">
-                      {item.asset.symbol}
-                    </span>
+                  <Link href={`/assets/${item.asset.symbol}`} className="group block min-w-[140px]">
+                    <AssetIdentity
+                      symbol={item.asset.symbol}
+                      name={item.asset.name}
+                      size="md"
+                      layout="stacked"
+                      nameClassName="group-hover:text-terminal-blue"
+                    />
                   </Link>
                 </td>
                 <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold tabular-nums text-white">
                   {formatPrice(item.price)}
+                </td>
+                <td
+                  className={cn(
+                    "px-4 py-2.5 text-right font-mono text-sm font-semibold tabular-nums",
+                    percentColorStrong(item.percent_change_1h)
+                  )}
+                >
+                  {formatPercent(item.percent_change_1h)}
                 </td>
                 <td
                   className={cn(

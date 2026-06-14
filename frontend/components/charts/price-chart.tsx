@@ -13,31 +13,31 @@ import {
 import type { ChartSignalMarker } from "@/lib/asset-explanations";
 import type { MarketSnapshot } from "@/lib/api";
 import { formatDate, formatPrice, priceAxisWidth, priceChartDomain } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { ChartEmptyState } from "./chart-empty-state";
 
 interface PriceChartProps {
   snapshots: MarketSnapshot[];
   markers?: ChartSignalMarker[];
+  className?: string;
 }
 
-export function PriceChart({ snapshots, markers = [] }: PriceChartProps) {
+export function PriceChart({ snapshots, markers = [], className }: PriceChartProps) {
   if (snapshots.length < 2) {
     return <ChartEmptyState />;
   }
 
-  const data = [...snapshots]
-    .reverse()
-    .map((s) => ({
-      time: formatDate(s.captured_at),
-      price: parseFloat(s.price),
-    }));
+  const data = snapshots.map((s) => ({
+    time: formatDate(s.captured_at),
+    price: parseFloat(s.price),
+  }));
 
   const prices = data.map((d) => d.price);
   const [domainMin, domainMax] = priceChartDomain(prices);
   const yAxisWidth = priceAxisWidth(prices);
 
   return (
-    <div className="relative h-72 w-full">
+    <div className={cn("relative w-full", className ?? "h-72")}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 20, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />

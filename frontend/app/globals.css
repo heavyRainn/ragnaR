@@ -18,4 +18,220 @@ body {
   .section-label {
     @apply font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-radar-muted;
   }
+
+  /* ── Crypto heatmap bubbles ── */
+  .cb-bubble-shell {
+    contain: layout style;
+    --bubble-d: calc(var(--bubble-r, 40) * 2px);
+    --bubble-border-w: clamp(1px, calc(var(--bubble-d) * 0.01), 3px);
+    --glow-scale: clamp(0.55, calc(var(--bubble-r, 40) / 72), 1.35);
+    --glow-boost: 1;
+  }
+
+  .cb-bubble-shell[data-large="true"] {
+    --glow-scale: clamp(1, calc(var(--bubble-r, 110) / 88), 1.6);
+  }
+
+  .cb-bubble {
+    border-radius: 9999px;
+    transition:
+      transform 180ms ease-out,
+      box-shadow 180ms ease-out,
+      filter 180ms ease-out;
+  }
+
+  .cb-bubble-hovered {
+    transform: scale(1.06);
+    --glow-boost: 1.15;
+  }
+
+  .cb-bubble-selected {
+    transform: scale(1.06);
+    --glow-boost: 1.2;
+  }
+
+  .cb-bubble-body {
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    border-style: solid;
+    border-width: var(--bubble-border-w);
+    box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+  }
+
+  .cb-bubble-up .cb-bubble-body {
+    border-color: rgba(0, 255, 120, 0.75);
+    background: radial-gradient(
+      circle at 35% 30%,
+      rgba(40, 255, 140, 0.18) 0%,
+      rgba(10, 25, 15, 0.95) 60%,
+      rgba(5, 10, 15, 1) 100%
+    );
+  }
+
+  .cb-bubble-down .cb-bubble-body {
+    border-color: rgba(255, 70, 70, 0.75);
+    background: radial-gradient(
+      circle at 35% 30%,
+      rgba(255, 70, 70, 0.18) 0%,
+      rgba(25, 10, 10, 0.95) 60%,
+      rgba(5, 10, 15, 1) 100%
+    );
+  }
+
+  .cb-bubble-flat .cb-bubble-body {
+    border-color: rgba(148, 163, 184, 0.55);
+    background: radial-gradient(
+      circle at 35% 30%,
+      rgba(148, 163, 184, 0.14) 0%,
+      rgba(12, 16, 22, 0.95) 60%,
+      rgba(5, 10, 15, 1) 100%
+    );
+  }
+
+  .cb-bubble-up {
+    box-shadow:
+      0 0 calc(12px * var(--glow-scale)) rgba(0, 255, 120, calc(0.35 * var(--glow-boost))),
+      0 0 calc(30px * var(--glow-scale)) rgba(0, 255, 120, calc(0.18 * var(--glow-boost)));
+  }
+
+  .cb-bubble-down {
+    box-shadow:
+      0 0 calc(12px * var(--glow-scale)) rgba(255, 60, 60, calc(0.35 * var(--glow-boost))),
+      0 0 calc(30px * var(--glow-scale)) rgba(255, 60, 60, calc(0.18 * var(--glow-boost)));
+  }
+
+  .cb-bubble-flat {
+    box-shadow:
+      0 0 calc(10px * var(--glow-scale)) rgba(148, 163, 184, calc(0.22 * var(--glow-boost))),
+      0 0 calc(24px * var(--glow-scale)) rgba(148, 163, 184, calc(0.1 * var(--glow-boost)));
+  }
+
+  .cb-bubble-shell[data-large="true"] .cb-bubble-up {
+    box-shadow:
+      0 0 calc(12px * var(--glow-scale)) rgba(0, 255, 120, calc(0.35 * var(--glow-boost))),
+      0 0 calc(30px * var(--glow-scale)) rgba(0, 255, 120, calc(0.18 * var(--glow-boost))),
+      0 0 calc(80px * var(--glow-scale)) rgba(0, 255, 120, calc(0.12 * var(--glow-boost)));
+  }
+
+  .cb-bubble-shell[data-large="true"] .cb-bubble-down {
+    box-shadow:
+      0 0 calc(12px * var(--glow-scale)) rgba(255, 60, 60, calc(0.35 * var(--glow-boost))),
+      0 0 calc(30px * var(--glow-scale)) rgba(255, 60, 60, calc(0.18 * var(--glow-boost))),
+      0 0 calc(80px * var(--glow-scale)) rgba(255, 60, 60, calc(0.12 * var(--glow-boost)));
+  }
+
+  .cb-bubble-signal.cb-bubble-up {
+    box-shadow:
+      0 0 calc(12px * var(--glow-scale)) rgba(0, 255, 120, calc(0.38 * var(--glow-boost))),
+      0 0 calc(30px * var(--glow-scale)) rgba(0, 255, 120, calc(0.2 * var(--glow-boost))),
+      0 0 calc(18px * var(--glow-scale)) rgba(59, 130, 246, calc(0.32 * var(--glow-boost)));
+  }
+
+  .cb-bubble-signal.cb-bubble-down {
+    box-shadow:
+      0 0 calc(12px * var(--glow-scale)) rgba(255, 60, 60, calc(0.38 * var(--glow-boost))),
+      0 0 calc(30px * var(--glow-scale)) rgba(255, 60, 60, calc(0.2 * var(--glow-boost))),
+      0 0 calc(18px * var(--glow-scale)) rgba(59, 130, 246, calc(0.32 * var(--glow-boost)));
+  }
+
+  .cb-bubble-content {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    outline: none;
+  }
+
+  .cb-bubble-content:focus-visible {
+    box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.55);
+    border-radius: 9999px;
+  }
+
+  .cb-bubble-layer {
+    position: absolute;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 94%;
+    text-align: center;
+    line-height: 1;
+  }
+
+  .cb-bubble-icon-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+  }
+
+  .cb-bubble-icon-wrap .cb-bubble-icon,
+  .cb-bubble-icon-wrap img {
+    width: clamp(24px, calc(var(--bubble-r, 40) * 0.56px), 96px) !important;
+    height: clamp(24px, calc(var(--bubble-r, 40) * 0.56px), 96px) !important;
+    max-width: none;
+    max-height: none;
+  }
+
+  .cb-bubble-symbol {
+    font-family: Inter, system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    color: #ffffff;
+    font-size: clamp(
+      28px,
+      calc(var(--bubble-r, 40) * 0.58px * var(--bubble-symbol-scale, 1)),
+      128px
+    );
+    line-height: 1.05;
+    text-shadow:
+      0 0 16px rgba(255, 255, 255, 0.4),
+      0 1px 4px rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 94%;
+  }
+
+  .cb-bubble-change {
+    font-family: Inter, system-ui, sans-serif;
+    font-weight: 500;
+    opacity: 0.95;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(12px, calc(var(--bubble-r, 40) * 0.2px), 48px);
+    line-height: 1.1;
+  }
+
+  .cb-bubble-up .cb-bubble-change {
+    color: #52ff9a;
+    text-shadow: 0 0 10px rgba(82, 255, 154, 0.45);
+  }
+
+  .cb-bubble-down .cb-bubble-change {
+    color: #ff6464;
+    text-shadow: 0 0 10px rgba(255, 100, 100, 0.45);
+  }
+
+  .cb-bubble-flat .cb-bubble-change {
+    color: rgba(203, 213, 225, 0.92);
+    text-shadow: 0 0 8px rgba(148, 163, 184, 0.35);
+  }
+
+  .cb-bubble-icon {
+    flex-shrink: 0;
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
+  }
+
+  .cb-bubble-tooltip {
+    background: rgba(10, 15, 20, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    overflow: hidden;
+  }
 }

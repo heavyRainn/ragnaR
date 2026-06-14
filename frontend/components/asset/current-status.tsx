@@ -1,6 +1,9 @@
+"use client";
+
 import type { AssetExplanationContext } from "@/lib/asset-explanations";
 import { statusAccentClass } from "@/lib/asset-explanations";
 import type { AssetDetail } from "@/lib/api";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { severityFromScore } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ScoreBadge } from "@/components/radar/score-badge";
@@ -11,6 +14,7 @@ interface CurrentStatusProps {
 }
 
 export function CurrentStatus({ detail, context }: CurrentStatusProps) {
+  const { t } = useI18n();
   const { hasActiveAnomaly } = context;
 
   return (
@@ -20,7 +24,7 @@ export function CurrentStatus({ detail, context }: CurrentStatusProps) {
         statusAccentClass(detail.anomaly_score, hasActiveAnomaly)
       )}
     >
-      <h2 className="section-label mb-4">Current Status</h2>
+      <h2 className="section-label mb-4">{t("asset.currentStatus")}</h2>
 
       {hasActiveAnomaly ? (
         <>
@@ -30,9 +34,9 @@ export function CurrentStatus({ detail, context }: CurrentStatusProps) {
           <p className="mt-2 text-sm text-cmc-muted">{context.statusSubtext}</p>
 
           <dl className="mt-6 grid gap-4 sm:grid-cols-3">
-            <StatusItem label="Active Signal" value={context.activeSignalLabel ?? "—"} highlight />
+            <StatusItem label={t("asset.activeSignal")} value={context.activeSignalLabel ?? "—"} highlight />
             <StatusItem
-              label="Current Score"
+              label={t("asset.currentScore")}
               value={
                 detail.anomaly_score > 0 ? (
                   <ScoreBadge
@@ -44,7 +48,7 @@ export function CurrentStatus({ detail, context }: CurrentStatusProps) {
                 )
               }
             />
-            <StatusItem label="Detected" value={context.detectedAt ?? "—"} />
+            <StatusItem label={t("asset.detected")} value={context.detectedAt ?? "—"} />
           </dl>
         </>
       ) : (
@@ -55,9 +59,15 @@ export function CurrentStatus({ detail, context }: CurrentStatusProps) {
           <p className="mt-2 text-sm text-cmc-muted">{context.statusSubtext}</p>
 
           <dl className="mt-6 grid gap-4 sm:grid-cols-3">
-            <StatusItem label="Last Detected Signal" value={context.lastSignalLabel ?? "None"} />
-            <StatusItem label="Peak Score" value={context.peakScore > 0 ? String(context.peakScore) : "—"} />
-            <StatusItem label="Current Score" value="0" muted />
+            <StatusItem
+              label={t("asset.lastDetectedSignal")}
+              value={context.lastSignalLabel ?? t("asset.none")}
+            />
+            <StatusItem
+              label={t("asset.peakScoreLabel")}
+              value={context.peakScore > 0 ? String(context.peakScore) : "—"}
+            />
+            <StatusItem label={t("asset.currentScore")} value="0" muted />
           </dl>
         </>
       )}

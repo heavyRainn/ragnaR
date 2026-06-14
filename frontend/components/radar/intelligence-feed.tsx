@@ -1,7 +1,11 @@
+"use client";
+
 import Link from "next/link";
 import type { Signal } from "@/lib/api";
-import { formatSignalType, formatTime } from "@/lib/format";
+import { AssetIdentity } from "@/components/ui/asset-identity";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { formatSignalType, formatTime } from "@/lib/format";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { ScoreBadge } from "./score-badge";
 
 interface IntelligenceFeedProps {
@@ -9,18 +13,19 @@ interface IntelligenceFeedProps {
 }
 
 export function IntelligenceFeed({ signals }: IntelligenceFeedProps) {
+  const { t, signalLabel } = useI18n();
   const feed = signals.slice(0, 12);
 
   return (
     <section className="mb-8">
-      <h2 className="section-label mb-4">Market Intelligence Feed</h2>
+      <h2 className="section-label mb-4">{t("radar.intelligenceFeed")}</h2>
       <Card>
         <CardHeader>
-          <p className="text-sm text-cmc-muted">Live anomaly events across tracked assets</p>
+          <p className="text-sm text-cmc-muted">{t("radar.intelligenceFeedHint")}</p>
         </CardHeader>
         <CardContent className="divide-y divide-radar-border p-0">
           {feed.length === 0 ? (
-            <p className="px-5 py-8 text-sm text-cmc-muted">No active market events.</p>
+            <p className="px-5 py-8 text-sm text-cmc-muted">{t("radar.noActiveEvents")}</p>
           ) : (
             feed.map((signal) => (
               <Link
@@ -33,15 +38,18 @@ export function IntelligenceFeed({ signals }: IntelligenceFeedProps) {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono font-semibold text-terminal-blue">
-                      {signal.asset_symbol}
-                    </span>
+                    <AssetIdentity
+                      symbol={signal.asset_symbol ?? "?"}
+                      size="sm"
+                      layout="symbol"
+                      symbolClassName="text-terminal-blue"
+                    />
                     <span className="text-sm font-medium text-cmc-text">
-                      {formatSignalType(signal.signal_type)}
+                      {signalLabel(signal.signal_type) || formatSignalType(signal.signal_type)}
                     </span>
                   </div>
                   <p className="mt-1 text-sm text-cmc-muted">
-                    {signal.feed_description ?? "Anomaly pattern detected"}
+                    {signal.feed_description ?? t("radar.anomalyDetected")}
                   </p>
                 </div>
                 <ScoreBadge score={signal.score} severity={signal.severity} className="shrink-0" />

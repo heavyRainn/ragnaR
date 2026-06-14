@@ -6,7 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import assets, debug, market_rotation, radar, replay, signals, snapshots, system
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.services.market_data_service import cleanup_mixed_mock_live_history, sync_from_coinmarketcap
+from app.services.market_data_service import (
+    cleanup_mixed_mock_live_history,
+    sync_from_coinmarketcap,
+)
+from app.services.snapshot_history_service import (
+    prune_stale_snapshots,
+    reconcile_irregular_live_history,
+)
 from app.services.refresh_service import refresh_market_data
 from app.services.seed_service import seed_database
 from app.services.sector_mapping import sync_asset_categories
@@ -19,6 +26,9 @@ async def lifespan(_: FastAPI):
     try:
         if settings.is_live_data:
             cleanup_mixed_mock_live_history(db)
+            reconcile_irregular_live_history(db)
+            prune_stale_snapshots(db)
+            db.commit()
             sync_from_coinmarketcap(db, force=True)
         elif settings.SEED_ON_STARTUP:
             seed_database(db)

@@ -7,6 +7,7 @@ import { CurrentStatus } from "@/components/asset/current-status";
 import { EnhancedNarrativeCard } from "@/components/asset/enhanced-narrative-card";
 import { KeyFindings } from "@/components/asset/key-findings";
 import { SignalExplanations } from "@/components/asset/signal-explanations";
+import { SignalHistory } from "@/components/asset/signal-history";
 import { SignalOutcomeCard } from "@/components/asset/signal-outcome";
 import { WhatChanged } from "@/components/asset/what-changed";
 import { WhyFlagged } from "@/components/asset/why-flagged";
@@ -18,6 +19,7 @@ import { ScoreDisplay } from "@/components/radar/score-display";
 import { SignalTimeline } from "@/components/radar/signal-timeline";
 import { Card, CardContent } from "@/components/ui/card";
 import { SnapshotFreshness } from "@/components/asset/snapshot-freshness";
+import { AssetIdentity } from "@/components/ui/asset-identity";
 import { FreshnessSyncBadge } from "@/components/ui/freshness-sync-badge";
 import { buildAssetExplanationContext } from "@/lib/asset-explanations";
 import { api, type AssetDetail, type MarketSnapshot, type ReplayPoint, type SystemStatus } from "@/lib/api";
@@ -29,11 +31,13 @@ import {
   percentColor,
   severityFromScore,
 } from "@/lib/format";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { cn } from "@/lib/utils";
 
 const REFRESH_INTERVAL_MS = 60_000;
 
 export default function AssetDetailPage() {
+  const { t, signalLabel, formatDate } = useI18n();
   const params = useParams();
   const symbol = (params.symbol as string).toUpperCase();
 
@@ -88,15 +92,20 @@ export default function AssetDetailPage() {
   const explanation = useMemo(
     () =>
       detail
-        ? buildAssetExplanationContext(detail, snapshots, replayPoints)
+        ? buildAssetExplanationContext(detail, snapshots, replayPoints, {
+            t,
+            signalLabel,
+            formatDate,
+          })
         : null,
-    [detail, snapshots, replayPoints]
+    [detail, snapshots, replayPoints, t, signalLabel, formatDate]
   );
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
-        <p className="text-radar-muted">Loading {symbol}...</p>
+      <main className="flex min-h-screen flex-col items-center justify-center gap-3">
+        <AssetIdentity symbol={symbol} size="lg" layout="symbol" />
+        <p className="text-radar-muted">{t("asset.loading")}</p>
       </main>
     );
   }
@@ -104,9 +113,9 @@ export default function AssetDetailPage() {
   if (error || !detail || !explanation) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-4">
-        <p className="text-terminal-red">Error: {error || "Asset not found"}</p>
+        <p className="text-terminal-red">{t("common.error")}: {error || t("asset.notFound")}</p>
         <Link href="/radar" className="text-terminal-blue hover:underline">
-          ← Back to Radar
+          {t("common.backToRadar")}
         </Link>
       </main>
     );
@@ -119,14 +128,14 @@ export default function AssetDetailPage() {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <Link href="/radar" className="text-sm text-radar-muted hover:text-terminal-blue">
-            ← Market Terminal
+            {t("common.backToTerminal")}
           </Link>
           <div className="flex items-center gap-4">
             <Link
               href={`/replay?symbol=${detail.asset.symbol}`}
               className="text-sm text-terminal-blue hover:underline"
             >
-              Signal Replay →
+              {t("asset.signalReplay")}
             </Link>
             <FreshnessSyncBadge
               status={systemStatus}
@@ -140,12 +149,15 @@ export default function AssetDetailPage() {
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="font-mono text-3xl font-bold text-cmc-text">{detail.asset.name}</h1>
-                <span className="rounded border border-radar-border bg-radar-elevated px-2 py-0.5 font-mono text-sm text-terminal-blue">
-                  {detail.asset.symbol}
-                </span>
+                <AssetIdentity
+                  symbol={detail.asset.symbol}
+                  name={detail.asset.name}
+                  size="xl"
+                  layout="row"
+                  nameClassName="!font-mono"
+                />
                 {detail.asset.rank && (
-                  <span className="font-mono text-sm text-radar-muted">Rank #{detail.asset.rank}</span>
+                  <span className="font-mono text-sm text-radar-muted">{t("common.rank", { rank: detail.asset.rank })}</span>
                 )}
               </div>
             </div>
@@ -154,24 +166,29 @@ export default function AssetDetailPage() {
             ) : (
               <div className="text-right">
                 <p className="font-mono text-sm font-semibold uppercase tracking-wide text-radar-muted">
-                  No active anomaly
+                  {t("asset.noActiveAnomaly")}
                 </p>
               </div>
             )}
           </div>
 
-          <div className="mt-6 grid gap-4 border-t border-radar-border pt-6 sm:grid-cols-2 lg:grid-cols-5">
-            <MetricCell label="Price" value={formatPrice(snapshot?.price)} prominent />
+          <div className="mt-6 grid gap-4 border-t border-radar-border pt-6 sm:grid-cols-2 lg:grid-cols-6">
+            <MetricCell label={t("common.price")} value={formatPrice(snapshot?.price)} prominent />
             <MetricCell
-              label="24h Change"
+              label={t("common.change1h")}
+              value={formatPercent(snapshot?.percent_change_1h)}
+              valueClass={percentColor(snapshot?.percent_change_1h)}
+            />
+            <MetricCell
+              label={t("common.change24h")}
               value={formatPercent(snapshot?.percent_change_24h)}
               valueClass={percentColor(snapshot?.percent_change_24h)}
             />
-            <MetricCell label="Market Cap" value={formatVolume(snapshot?.market_cap)} muted />
-            <MetricCell label="Volume 24h" value={formatVolume(snapshot?.volume_24h)} />
+            <MetricCell label={t("common.marketCap")} value={formatVolume(snapshot?.market_cap)} muted />
+            <MetricCell label={t("common.volume24h")} value={formatVolume(snapshot?.volume_24h)} />
             <MetricCell
-              label="Radar Score"
-              value={detail.anomaly_score > 0 ? String(detail.anomaly_score) : "No active anomaly"}
+              label={t("asset.radarScore")}
+              value={detail.anomaly_score > 0 ? String(detail.anomaly_score) : t("asset.noActiveAnomaly")}
               valueClass={
                 detail.anomaly_score > 0 && severityFromScore(detail.anomaly_score) === "critical"
                   ? "text-terminal-red"
@@ -188,7 +205,11 @@ export default function AssetDetailPage() {
         </header>
 
         <CurrentStatus detail={detail} context={explanation} />
-        {detail.signal_outcome && <SignalOutcomeCard outcome={detail.signal_outcome} />}
+        <SignalHistory signals={detail.historical_signals ?? []} symbol={detail.asset.symbol} />
+        <SignalExplanations context={explanation} />
+        {detail.signal_outcome && explanation.hasActiveAnomaly && (
+          <SignalOutcomeCard outcome={detail.signal_outcome} />
+        )}
         <WhyFlagged context={explanation} />
 
         <div className="mb-8 grid gap-6 lg:grid-cols-2">
@@ -197,11 +218,10 @@ export default function AssetDetailPage() {
         </div>
 
         <EnhancedNarrativeCard context={explanation} />
-        <SignalExplanations context={explanation} />
 
         <div className="mb-8 grid gap-6 lg:grid-cols-2">
           <section>
-            <h2 className="section-label mb-4">Score Breakdown</h2>
+            <h2 className="section-label mb-4">{t("asset.scoreBreakdown")}</h2>
             <Card>
               <CardContent className="py-5">
                 <ScoreBreakdownCard breakdown={detail.score_breakdown} />
@@ -210,7 +230,7 @@ export default function AssetDetailPage() {
           </section>
 
           <section>
-            <h2 className="section-label mb-4">Signal Timeline</h2>
+            <h2 className="section-label mb-4">{t("asset.signalTimeline")}</h2>
             <Card>
               <CardContent className="py-5">
                 <SignalTimeline signals={detail.signal_timeline} />
@@ -220,21 +240,19 @@ export default function AssetDetailPage() {
         </div>
 
         <section>
-          <h2 className="section-label mb-4">Market Charts</h2>
-          <p className="mb-4 text-sm text-cmc-muted">
-            Vertical markers show when Radar detected each signal type relative to price and volume.
-          </p>
+          <h2 className="section-label mb-4">{t("asset.marketCharts")}</h2>
+          <p className="mb-4 text-sm text-cmc-muted">{t("asset.marketChartsHint")}</p>
           <div className="grid gap-6 lg:grid-cols-2">
-            <ChartPanel title="Price">
+            <ChartPanel title={t("common.price")}>
               <PriceChart snapshots={snapshots} markers={explanation.chartMarkers} />
             </ChartPanel>
-            <ChartPanel title="Volume">
+            <ChartPanel title={t("common.volume24h")}>
               <VolumeChart snapshots={snapshots} markers={explanation.chartMarkers} />
             </ChartPanel>
           </div>
           {replayPoints.length > 0 && (
             <div className="mt-6">
-              <ChartPanel title="Score History">
+              <ChartPanel title={t("replay.scoreEvolution")}>
                 <ReplayScoreChart points={replayPoints} />
               </ChartPanel>
             </div>

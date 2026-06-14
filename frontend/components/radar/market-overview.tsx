@@ -1,5 +1,8 @@
+"use client";
+
 import type { RadarItem, Signal } from "@/lib/api";
 import { buildMarketOverview, marketModeColor } from "@/lib/market-intelligence";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -9,18 +12,19 @@ interface MarketOverviewProps {
 }
 
 export function MarketOverview({ items, signals }: MarketOverviewProps) {
+  const { t } = useI18n();
   const overview = buildMarketOverview(items, signals);
 
   const stats = [
-    { label: "Tracked Assets", value: overview.trackedAssets },
-    { label: "Active Signals", value: overview.activeSignals },
-    { label: "Average Anomaly Score", value: overview.avgScore },
-    { label: "Critical Signals", value: overview.criticalSignals },
+    { label: t("radar.trackedAssets"), value: overview.trackedAssets },
+    { label: t("radar.activeSignals"), value: overview.activeSignals },
+    { label: t("radar.avgScore"), value: overview.avgScore },
+    { label: t("radar.criticalSignals"), value: overview.criticalSignals },
   ];
 
   return (
     <section className="mb-8">
-      <h2 className="section-label mb-4">Market Overview</h2>
+      <h2 className="section-label mb-4">{t("radar.marketOverview")}</h2>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {stats.map((stat) => (
           <Card key={stat.label}>
@@ -34,7 +38,7 @@ export function MarketOverview({ items, signals }: MarketOverviewProps) {
         ))}
         <Card>
           <CardContent className="py-5">
-            <p className="text-[11px] uppercase tracking-wider text-radar-muted">Market Mode</p>
+            <p className="text-[11px] uppercase tracking-wider text-radar-muted">{t("radar.marketMode")}</p>
             <p
               className={cn(
                 "mt-2 inline-flex rounded border px-3 py-1.5 font-mono text-sm font-semibold tracking-wide",

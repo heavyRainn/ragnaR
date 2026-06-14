@@ -8,29 +8,37 @@ import { NarrativeBlock } from "@/components/radar/narrative-block";
 import { ScoreDisplay } from "@/components/radar/score-display";
 import { ScoreBadge } from "@/components/radar/score-badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { AssetIdentity } from "@/components/ui/asset-identity";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { api, type Asset, type ReplayPoint, type ReplayQuickIndices } from "@/lib/api";
 import {
   formatDate,
   formatPercent,
   formatPrice,
-  formatSignalType,
   formatVolume,
   percentColor,
 } from "@/lib/format";
+import { chartVolumeUnitFromRows, volumeFromFields } from "@/lib/chart-volume";
 import { buildWhatRadarSaw } from "@/lib/replay-explanation";
 import { cn } from "@/lib/utils";
 
 type QuickMode = "before_signal" | "signal_detected" | "current_state";
 
-const QUICK_MODES: { id: QuickMode; label: string }[] = [
-  { id: "before_signal", label: "Before Signal" },
-  { id: "signal_detected", label: "Signal Detected" },
-  { id: "current_state", label: "Current State" },
+const QUICK_MODES: { id: QuickMode; labelKey: string }[] = [
+  { id: "before_signal", labelKey: "replay.beforeSignal" },
+  { id: "signal_detected", labelKey: "replay.signalDetected" },
+  { id: "current_state", labelKey: "replay.currentState" },
 ];
 
 function ReplayPageContent() {
+  const { t, signalLabel } = useI18n();
   const searchParams = useSearchParams();
   const querySymbol = searchParams.get("symbol")?.toUpperCase() ?? null;
+  const querySignalIdRaw = searchParams.get("signal_id");
+  const querySignalId =
+    querySignalIdRaw != null && querySignalIdRaw !== ""
+      ? Number.parseInt(querySignalIdRaw, 10)
+      : null;
 
   const [assets, setAssets] = useState<Asset[]>([]);
   const [symbol, setSymbol] = useState<string | null>(querySymbol);
@@ -61,17 +69,24 @@ function ReplayPageContent() {
     setLoading(true);
     setError(null);
 
-    const loadReplay = async (target: string) => {
-      const data = await api.getReplay(target);
+    const loadReplay = async (target: string, signalId?: number) => {
+      const data = await api.getReplay(target, signalId);
       setSymbol(data.symbol);
       setPoints(data.points);
       setQuickIndices(data.quick_indices);
-      const currentIdx = data.quick_indices?.current_state ?? Math.max(0, data.points.length - 1);
-      setIndex(currentIdx);
-      setActiveMode("current_state");
+      const focusSignal =
+        signalId != null && data.quick_indices?.signal_detected != null
+          ? data.quick_indices.signal_detected
+          : (data.quick_indices?.current_state ?? Math.max(0, data.points.length - 1));
+      setIndex(focusSignal);
+      setActiveMode(
+        signalId != null && data.quick_indices?.signal_detected != null
+          ? "signal_detected"
+          : "current_state"
+      );
     };
 
-    loadReplay(symbol).catch(async () => {
+    loadReplay(symbol, querySignalId ?? undefined).catch(async () => {
       try {
         const fallback = await api.getReplayDefaultSymbol();
         await loadReplay(fallback.symbol);
@@ -83,7 +98,12 @@ function ReplayPageContent() {
         }
       }
     }).finally(() => setLoading(false));
-  }, [symbol]);
+  }, [symbol, querySignalId]);
+
+  const currentAsset = useMemo(
+    () => assets.find((asset) => asset.symbol === symbol) ?? null,
+    [assets, symbol]
+  );
 
   const current = useMemo(() => points[index] ?? null, [points, index]);
   const previous = useMemo(() => (index > 0 ? points[index - 1] : null), [points, index]);
@@ -101,6 +121,11 @@ function ReplayPageContent() {
     if (prevPrice === 0) return null;
     return ((curr - prevPrice) / prevPrice) * 100;
   }, [current, index, points]);
+
+  const volumeMetricLabel = useMemo(() => {
+    const unit = chartVolumeUnitFromRows(points);
+    return unit === "1m" ? t("asset.chartVolume1m") : t("asset.chartVolume24h");
+  }, [points, t]);
 
   function jumpToMode(mode: QuickMode) {
     if (!quickIndices) return;
@@ -120,23 +145,29 @@ function ReplayPageContent() {
       <div className="mx-auto max-w-7xl">
         <header className="mb-8 border-b border-radar-border pb-6">
           <Link href="/radar" className="text-sm text-radar-muted hover:text-terminal-blue">
-            ← Market Terminal
+            {t("common.backToTerminal")}
           </Link>
           <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1 className="font-mono text-2xl font-bold tracking-tight text-cmc-text sm:text-3xl">
-                Signal Replay
+                {t("replay.title")}
               </h1>
-              <p className="mt-2 max-w-lg text-sm text-cmc-muted">
-                Scrub through historical snapshots to see when the system detected anomalies
-                before price movement.
-              </p>
+              <p className="mt-2 max-w-lg text-sm text-cmc-muted">{t("replay.subtitle")}</p>
             </div>
-            <select
-              value={symbol ?? ""}
-              onChange={(e) => setSymbol(e.target.value)}
-              className="rounded-md border border-radar-border bg-radar-card px-4 py-2.5 font-mono text-sm text-cmc-text shadow-terminal transition-colors hover:border-terminal-blue/30 focus:border-terminal-blue focus:outline-none"
-            >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+              {symbol && (
+                <AssetIdentity
+                  symbol={symbol}
+                  name={currentAsset?.name}
+                  size="md"
+                  layout="stacked"
+                />
+              )}
+              <select
+                value={symbol ?? ""}
+                onChange={(e) => setSymbol(e.target.value)}
+                className="rounded-md border border-radar-border bg-radar-card px-4 py-2.5 font-mono text-sm text-cmc-text shadow-terminal transition-colors hover:border-terminal-blue/30 focus:border-terminal-blue focus:outline-none"
+              >
               {(assets.length > 0
                 ? assets
                 : symbol
@@ -147,21 +178,26 @@ function ReplayPageContent() {
                   {asset.symbol} — {asset.name}
                 </option>
               ))}
-            </select>
+              </select>
+            </div>
           </div>
         </header>
 
-        {loading && <p className="text-cmc-muted">Loading replay data...</p>}
-        {error && <p className="text-terminal-red">Error: {error}</p>}
+        {loading && <p className="text-cmc-muted">{t("replay.loading")}</p>}
+        {error && (
+          <p className="text-terminal-red">
+            {t("common.error")}: {error}
+          </p>
+        )}
 
         {!loading && !error && symbol && points.length === 0 && (
-          <p className="text-cmc-muted">No replay data available for {symbol}.</p>
+          <p className="text-cmc-muted">{t("replay.noData", { symbol })}</p>
         )}
 
         {!loading && !error && points.length > 0 && current && (
           <>
             <section className="mb-8">
-              <h2 className="section-label mb-4">Score Evolution</h2>
+              <h2 className="section-label mb-4">{t("replay.scoreEvolution")}</h2>
               <Card>
                 <CardContent className="py-5">
                   <ReplayScoreChart points={points} highlightIndex={index} />
@@ -189,7 +225,7 @@ function ReplayPageContent() {
                               : "border-radar-border text-radar-muted hover:border-terminal-blue/30 hover:text-cmc-text"
                         )}
                       >
-                        {mode.label}
+                        {t(mode.labelKey)}
                       </button>
                     );
                   })}
@@ -198,7 +234,7 @@ function ReplayPageContent() {
             )}
 
             <section>
-              <h2 className="section-label mb-4">Historical Snapshot</h2>
+              <h2 className="section-label mb-4">{t("replay.historicalSnapshot")}</h2>
               <Card>
                 <CardContent className="py-6">
                   <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -207,7 +243,7 @@ function ReplayPageContent() {
                         {formatDate(current.timestamp)}
                       </p>
                       <p className="mt-1 font-mono text-xs text-radar-muted">
-                        Point {index + 1} of {points.length}
+                        {t("common.pointOf", { current: index + 1, total: points.length })}
                       </p>
                     </div>
                     <ScoreDisplay score={current.anomaly_score} size="lg" />
@@ -231,7 +267,10 @@ function ReplayPageContent() {
 
                   <div className="mt-8 grid gap-4 sm:grid-cols-3">
                     <MetricCard label="Price" value={formatPrice(current.price)} />
-                    <MetricCard label="Volume 24h" value={formatVolume(current.volume_24h)} />
+                    <MetricCard
+                      label={volumeMetricLabel}
+                      value={current ? formatVolume(volumeFromFields(current)) : "—"}
+                    />
                     <MetricCard
                       label="Price Δ (step)"
                       value={priceChange !== null ? formatPercent(priceChange) : "—"}
@@ -267,7 +306,7 @@ function ReplayPageContent() {
                             className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-radar-elevated/40"
                           >
                             <span className="font-medium text-cmc-text">
-                              {formatSignalType(signal.signal_type)}
+                              {signalLabel(signal.signal_type)}
                             </span>
                             <ScoreBadge score={signal.score} severity={signal.severity} />
                           </li>
@@ -304,15 +343,18 @@ function MetricCard({
   );
 }
 
+function ReplayLoadingFallback() {
+  const { t } = useI18n();
+  return (
+    <main className="flex min-h-screen items-center justify-center">
+      <p className="text-cmc-muted">{t("replay.loading")}</p>
+    </main>
+  );
+}
+
 export default function ReplayPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="flex min-h-screen items-center justify-center">
-          <p className="text-cmc-muted">Loading replay...</p>
-        </main>
-      }
-    >
+    <Suspense fallback={<ReplayLoadingFallback />}>
       <ReplayPageContent />
     </Suspense>
   );

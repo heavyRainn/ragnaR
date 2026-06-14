@@ -19,6 +19,8 @@ export interface MarketSnapshot {
   asset_id: number;
   price: string;
   volume_24h: string;
+  volume_1m: string | null;
+  volume_source: string | null;
   market_cap: string | null;
   percent_change_1h: string | null;
   percent_change_24h: string | null;
@@ -40,6 +42,18 @@ export interface Signal {
   asset_symbol?: string | null;
   asset_name?: string | null;
   feed_description?: string | null;
+}
+
+export interface HistoricalSignal {
+  id: number;
+  signal_type: string;
+  detected_at: string;
+  resolved_at: string | null;
+  peak_score: number;
+  outcome_percent: number | null;
+  duration_seconds: number;
+  status: string;
+  reason_json: Record<string, number> | null;
 }
 
 export interface SignalOutcome {
@@ -73,6 +87,7 @@ export interface RadarItem {
   price: string | null;
   volume_24h: string | null;
   market_cap: string | null;
+  percent_change_1h: string | null;
   percent_change_24h: string | null;
   anomaly_score: number;
   severity: string;
@@ -93,6 +108,7 @@ export interface AssetDetail {
   snapshot_count: number;
   required_snapshot_count: number;
   signal_outcome: SignalOutcome | null;
+  historical_signals: HistoricalSignal[];
 }
 
 export interface ReplayResponse {
@@ -107,6 +123,9 @@ export interface ReplayPoint {
   timestamp: string;
   price: string;
   volume_24h: string;
+  volume_1m: string | null;
+  volume_source: string | null;
+  market_cap: string | null;
   anomaly_score: number;
   signals: Signal[];
   narrative: Narrative;
@@ -177,5 +196,10 @@ export const api = {
   getRecentMarketEvents: () => fetchApi<RecentMarketEvent[]>("/api/signals/recent"),
   getMarketRotation: () => fetchApi<MarketRotation>("/api/market-rotation"),
   getReplayDefaultSymbol: () => fetchApi<{ symbol: string }>("/api/replay/default-symbol"),
-  getReplay: (symbol: string) => fetchApi<ReplayResponse>(`/api/replay/${symbol}`),
+  getReplay: (symbol: string, signalId?: number) =>
+    fetchApi<ReplayResponse>(
+      signalId != null
+        ? `/api/replay/${symbol}?signal_id=${signalId}`
+        : `/api/replay/${symbol}`
+    ),
 };

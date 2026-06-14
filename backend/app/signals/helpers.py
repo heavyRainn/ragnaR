@@ -6,6 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.models.market_snapshot import MarketSnapshot
 from app.signals.common import MAX_STEP_RETURN, MIN_BASELINE_SNAPSHOTS, MIN_SNAPSHOTS
+from app.signals.volume_metrics import (
+    avg_baseline_shock_volume as avg_baseline_volume,
+    compute_volume_metrics,
+    snapshot_shock_volume,
+)
 
 SignalCandidateResult = dict | None
 
@@ -56,20 +61,14 @@ def get_chronological_snapshots(db: Session, asset_id: int, limit: int = 25) -> 
     return list(reversed(rows))
 
 
-def avg_baseline_volume(baseline_snapshots: list[MarketSnapshot]) -> Decimal | None:
-    if not baseline_snapshots:
-        return None
-    total = sum(s.volume_24h for s in baseline_snapshots)
-    return total / len(baseline_snapshots)
-
-
 def compute_volume_ratio(latest: MarketSnapshot, baseline_snapshots: list[MarketSnapshot]) -> float | None:
-    if float(latest.volume_24h) <= 0:
+    current = snapshot_shock_volume(latest)
+    if current is None or float(current) <= 0:
         return None
     baseline = avg_baseline_volume(baseline_snapshots)
     if baseline is None or float(baseline) <= 0:
         return None
-    return float(latest.volume_24h / baseline)
+    return float(current / baseline)
 
 
 def compute_returns_from_prices(snapshots: list[MarketSnapshot]) -> list[float]:
@@ -94,48 +93,6 @@ def metric_snapshot_from(latest: MarketSnapshot) -> dict:
         "percent_change_24h": float(latest.percent_change_24h)
         if latest.percent_change_24h is not None
         else None,
-    }
-
-
-def compute_volume_metrics(
-    latest: MarketSnapshot,
-    baseline_snapshots: list[MarketSnapshot],
-    snapshot_count: int,
-) -> dict:
-    if snapshot_count < MIN_SNAPSHOTS:
-        return {
-            "volume_ratio": None,
-            "baseline_volume_24h": None,
-            "skip_reason": f"insufficient_snapshots:{snapshot_count}<{MIN_SNAPSHOTS}",
-        }
-
-    if len(baseline_snapshots) < MIN_BASELINE_SNAPSHOTS:
-        return {
-            "volume_ratio": None,
-            "baseline_volume_24h": None,
-            "skip_reason": f"insufficient_baseline:{len(baseline_snapshots)}<{MIN_BASELINE_SNAPSHOTS}",
-        }
-
-    if float(latest.volume_24h) <= 0:
-        return {
-            "volume_ratio": None,
-            "baseline_volume_24h": None,
-            "skip_reason": "current_volume_non_positive",
-        }
-
-    baseline = avg_baseline_volume(baseline_snapshots)
-    if baseline is None or float(baseline) <= 0:
-        return {
-            "volume_ratio": None,
-            "baseline_volume_24h": None,
-            "skip_reason": "baseline_volume_invalid",
-        }
-
-    ratio = float(latest.volume_24h / baseline)
-    return {
-        "volume_ratio": ratio,
-        "baseline_volume_24h": float(baseline),
-        "skip_reason": None,
     }
 
 

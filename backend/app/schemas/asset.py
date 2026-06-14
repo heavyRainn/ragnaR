@@ -26,6 +26,8 @@ class MarketSnapshotOut(BaseModel):
     asset_id: int
     price: Decimal
     volume_24h: Decimal
+    volume_1m: Decimal | None = None
+    volume_source: str | None = None
     market_cap: Decimal | None
     percent_change_1h: Decimal | None
     percent_change_24h: Decimal | None
@@ -34,6 +36,7 @@ class MarketSnapshotOut(BaseModel):
     captured_at: datetime
 
 
+from app.schemas.historical_signal import HistoricalSignalOut
 from app.schemas.narrative import NarrativeOut
 from app.schemas.score import ScoreBreakdownOut
 from app.schemas.signal import SignalOut
@@ -51,6 +54,7 @@ class AssetDetailOut(BaseModel):
     snapshot_count: int
     required_snapshot_count: int
     signal_outcome: SignalOutcomeOut | None = None
+    historical_signals: list[HistoricalSignalOut] = []
 
 
 AssetDetailOut.model_rebuild()

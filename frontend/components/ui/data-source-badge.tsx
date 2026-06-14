@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { api, type SystemStatus } from "@/lib/api";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { cn } from "@/lib/utils";
 
 export function DataSourceBadge() {
+  const { t } = useI18n();
   const [status, setStatus] = useState<SystemStatus | null>(null);
 
   useEffect(() => {
@@ -26,8 +28,8 @@ export function DataSourceBadge() {
       title={status.message}
     >
       {isLive
-        ? `LIVE DATA · CoinMarketCap · Top ${status.cmc_listings_limit ?? 50}`
-        : "MOCK DATA · Seeded snapshots"}
+        ? t("dataSource.live", { n: status.cmc_listings_limit ?? 100 })
+        : t("dataSource.mock")}
     </span>
   );
 }

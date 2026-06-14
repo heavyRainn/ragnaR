@@ -8,7 +8,10 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.asset import Asset
 from app.models.market_snapshot import MarketSnapshot
-from app.services.bybit_backfill_service import backfill_new_assets
+from app.services.bybit_backfill_service import (
+    backfill_asset_from_bybit,
+    backfill_new_assets,
+)
 from app.services.cmc_service import (
     CoinMarketCapError,
     fetch_listings_latest,
@@ -16,16 +19,16 @@ from app.services.cmc_service import (
     parse_listing,
     parse_quote,
 )
+from app.services.cmc_snapshot_sync import upsert_cmc_snapshot
 from app.services.sector_mapping import resolve_sector
 from app.services.signal_service import refresh_signals, resolve_active_signals_for_asset
+from app.services.snapshot_history_service import prune_stale_snapshots
 from app.services.sync_state import sync_state
 from app.signals.helpers import compute_returns_from_prices, get_chronological_snapshots
 
 logger = logging.getLogger(__name__)
 
-# A single 60s sync interval should not move more than ~15% for top assets.
 SOURCE_MISMATCH_THRESHOLD = 0.15
-# Startup cleanup: purge history if any inter-snapshot return exceeds 20%.
 ABNORMAL_HISTORY_RETURN_THRESHOLD = 0.20
 
 
@@ -38,6 +41,8 @@ def _is_price_source_mismatch(old_price: float, new_price: float) -> bool:
 def _reset_asset_market_history(db: Session, asset: Asset, reason: str) -> None:
     db.execute(delete(MarketSnapshot).where(MarketSnapshot.asset_id == asset.id))
     resolve_active_signals_for_asset(db, asset.id)
+    asset.history_backfilled = False
+    asset.history_backfill_attempted = False
     db.flush()
     logger.info("Reset market history for %s (%s)", asset.symbol, reason)
 
@@ -56,7 +61,7 @@ def cleanup_mixed_mock_live_history(db: Session) -> int:
     purged = 0
 
     for asset in assets:
-        chronological = get_chronological_snapshots(db, asset.id, limit=25)
+        chronological = get_chronological_snapshots(db, asset.id, limit=20)
         returns = compute_returns_from_prices(chronological)
         if any(abs(r) > ABNORMAL_HISTORY_RETURN_THRESHOLD for r in returns):
             _reset_asset_market_history(db, asset, "abnormal_return_in_history")
@@ -116,19 +121,28 @@ def _deactivate_stale_live_assets(db: Session, synced_asset_ids: set[int]) -> in
     return len(stale)
 
 
-def _insert_snapshot(db: Session, asset: Asset, parsed: dict, captured_at: datetime) -> None:
-    snapshot = MarketSnapshot(
-        asset_id=asset.id,
-        price=parsed["price"],
-        volume_24h=parsed["volume_24h"],
-        market_cap=parsed["market_cap"],
-        percent_change_1h=parsed["percent_change_1h"],
-        percent_change_24h=parsed["percent_change_24h"],
-        percent_change_7d=parsed["percent_change_7d"],
-        cmc_rank=parsed["cmc_rank"],
-        captured_at=captured_at,
-    )
-    db.add(snapshot)
+def _insert_snapshot(db: Session, asset: Asset, parsed: dict, captured_at: datetime) -> bool:
+    return upsert_cmc_snapshot(db, asset, parsed, captured_at)
+
+
+def _sync_live_asset_snapshot(db: Session, asset: Asset, parsed: dict, captured_at: datetime) -> bool:
+    """Backfill on first appearance, then always merge the latest CMC quote."""
+    if not asset.history_backfilled:
+        asset.history_backfill_attempted = True
+        if backfill_asset_from_bybit(db, asset):
+            asset.history_backfilled = True
+        else:
+            new_price = float(parsed["price"])
+            _maybe_reset_before_snapshot(db, asset, new_price)
+            if upsert_cmc_snapshot(db, asset, parsed, captured_at):
+                asset.history_backfilled = True
+            return True
+
+        return upsert_cmc_snapshot(db, asset, parsed, captured_at)
+
+    new_price = float(parsed["price"])
+    _maybe_reset_before_snapshot(db, asset, new_price)
+    return upsert_cmc_snapshot(db, asset, parsed, captured_at)
 
 
 def _sync_from_listings(db: Session, api_key: str) -> tuple[int, set[int]]:
@@ -145,10 +159,13 @@ def _sync_from_listings(db: Session, api_key: str) -> tuple[int, set[int]]:
 
         asset = _upsert_asset(db, parsed)
         synced_ids.add(asset.id)
-        new_price = float(parsed["price"])
-        _maybe_reset_before_snapshot(db, asset, new_price)
-        _insert_snapshot(db, asset, parsed, now)
-        synced += 1
+
+        if settings.is_live_data:
+            if _sync_live_asset_snapshot(db, asset, parsed, now):
+                synced += 1
+        else:
+            _insert_snapshot(db, asset, parsed, now)
+            synced += 1
 
     deactivated = _deactivate_stale_live_assets(db, synced_ids)
     if deactivated:
@@ -178,10 +195,12 @@ def _sync_from_quotes(db: Session, api_key: str) -> int:
         if parsed["cmc_rank"] is not None:
             asset.rank = parsed["cmc_rank"]
 
-        new_price = float(parsed["price"])
-        _maybe_reset_before_snapshot(db, asset, new_price)
-        _insert_snapshot(db, asset, parsed, now)
-        synced += 1
+        if settings.is_live_data:
+            if _sync_live_asset_snapshot(db, asset, parsed, now):
+                synced += 1
+        else:
+            _insert_snapshot(db, asset, parsed, now)
+            synced += 1
 
     return synced
 
@@ -231,6 +250,10 @@ def sync_from_coinmarketcap(db: Session, *, force: bool = False) -> bool:
         logger.error("CMC sync failed: error=%s", error)
         return False
 
+    pruned = prune_stale_snapshots(db)
+    if pruned:
+        logger.info("Pruned %s market snapshots older than 15 minutes", pruned)
+
     db.commit()
 
     touched = refresh_signals(db)
@@ -238,6 +261,10 @@ def sync_from_coinmarketcap(db: Session, *, force: bool = False) -> bool:
 
     backfilled = backfill_new_assets(db)
     if backfilled > 0:
+        pruned_after_backfill = prune_stale_snapshots(db)
+        if pruned_after_backfill:
+            logger.info("Pruned %s market snapshots after backfill", pruned_after_backfill)
+        db.commit()
         touched = refresh_signals(db)
         signals_count = len(touched)
 
@@ -247,11 +274,12 @@ def sync_from_coinmarketcap(db: Session, *, force: bool = False) -> bool:
         signals_refreshed=signals_count,
     )
     logger.info(
-        "CMC sync completed: assets=%s snapshots_inserted=%s signals_refreshed=%s backfilled_assets=%s",
+        "CMC sync completed: assets=%s snapshots_inserted=%s signals_refreshed=%s backfilled_assets=%s pruned=%s",
         synced,
         synced,
         signals_count,
         backfilled,
+        pruned,
     )
     return True
 

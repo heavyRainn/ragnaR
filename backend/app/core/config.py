@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://radar_user:radar_password@postgres:5432/radar_db"
     SEED_ON_STARTUP: bool = True
     CMC_API_KEY: str | None = None
-    CMC_LISTINGS_LIMIT: int = 50
+    CMC_LISTINGS_LIMIT: int = 100
     # Min 60s — one listings/latest call per tick (~1 CMC credit). Do not set lower.
     CMC_SYNC_INTERVAL_SECONDS: int = 60
     # Deprecated alias — falls back when unset in older .env files
@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     BYBIT_BACKFILL_ENABLED: bool = True
     BYBIT_BACKFILL_BATCH_SIZE: int = 5
     BYBIT_BACKFILL_REQUEST_DELAY_MS: int = 250
-    BYBIT_BACKFILL_CANDLE_LIMIT: int = 60
+    BYBIT_BACKFILL_CANDLE_LIMIT: int = 15
 
     @property
     def cmc_sync_interval(self) -> int:

@@ -34,6 +34,9 @@ def evaluate_quiet_accumulation_candidate(
     if vol_skip and ratio is None:
         return {"triggered": False, "skip_reason": vol_skip}
 
+    if vol_skip and ratio is not None:
+        return {"triggered": False, "skip_reason": vol_skip}
+
     if ratio is None or ratio < QUIET_ACCUMULATION_VOLUME_THRESHOLD:
         return {"triggered": False, "skip_reason": vol_skip or "volume_below_threshold"}
 
@@ -48,7 +51,8 @@ def evaluate_quiet_accumulation_candidate(
         "volume_threshold": QUIET_ACCUMULATION_VOLUME_THRESHOLD,
         "price_flat_threshold": QUIET_ACCUMULATION_PRICE_FLAT_THRESHOLD,
         "baseline_volume_24h": baseline_vol,
-        "current_volume_24h": float(latest.volume_24h),
+        "current_volume_24h": volume_metrics.get("current_volume_24h") or float(latest.volume_24h),
+        "volume_unit": volume_metrics.get("volume_unit"),
         "snapshot_count": snapshot_count,
     }
 

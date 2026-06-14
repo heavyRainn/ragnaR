@@ -11,10 +11,12 @@ import { TopOpportunities } from "@/components/radar/top-opportunities";
 import { DataSourceBadge } from "@/components/ui/data-source-badge";
 import { FreshnessSyncBadge } from "@/components/ui/freshness-sync-badge";
 import { api } from "@/lib/api";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { usePolling } from "@/lib/hooks/use-polling";
 import { DEFAULT_RADAR_FILTERS, filterAndSortRadarItems } from "@/lib/radar-filters";
 
 export default function RadarPage() {
+  const { t } = useI18n();
   const { data: items, loading, error } = usePolling(() => api.getRadar(), 60_000);
   const { data: signals } = usePolling(() => api.getSignals(), 60_000);
   const { data: recentEvents } = usePolling(() => api.getRecentMarketEvents(), 60_000);
@@ -33,14 +35,12 @@ export default function RadarPage() {
         <header className="mb-10 flex flex-wrap items-start justify-between gap-4 border-b border-radar-border pb-6">
           <div>
             <h1 className="font-mono text-2xl font-bold tracking-tight text-cmc-text sm:text-3xl">
-              Market Intelligence Terminal
+              {t("radar.title")}
             </h1>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <DataSourceBadge />
             </div>
-            <p className="mt-2 max-w-xl text-sm text-cmc-muted">
-              Real-time anomaly detection and market narrative across tracked crypto assets.
-            </p>
+            <p className="mt-2 max-w-xl text-sm text-cmc-muted">{t("radar.subtitle")}</p>
           </div>
           <FreshnessSyncBadge
             status={systemStatus}
@@ -49,10 +49,12 @@ export default function RadarPage() {
           />
         </header>
 
-        {loading && !items && (
-          <p className="text-cmc-muted">Initializing market intelligence...</p>
+        {loading && !items && <p className="text-cmc-muted">{t("radar.initializing")}</p>}
+        {error && (
+          <p className="text-terminal-red">
+            {t("common.error")}: {error}
+          </p>
         )}
-        {error && <p className="text-terminal-red">Error: {error}</p>}
 
         {items && (
           <>
@@ -63,9 +65,9 @@ export default function RadarPage() {
             <IntelligenceFeed signals={signals ?? []} />
 
             <section className="mt-10">
-              <h2 className="section-label mb-4">Full Radar Table</h2>
+              <h2 className="section-label mb-4">{t("radar.fullTable")}</h2>
               <p className="mb-4 text-sm text-cmc-muted">
-                Complete market scan — search, filter, and sort {items.length} tracked assets.
+                {t("radar.fullTableHint", { count: items.length })}
               </p>
               <RadarTableControls
                 filters={filters}
@@ -75,13 +77,13 @@ export default function RadarPage() {
               />
               {filteredItems.length === 0 ? (
                 <p className="rounded-lg border border-radar-border bg-radar-card p-8 text-center text-sm text-cmc-muted">
-                  No assets match the current filters.{" "}
+                  {t("radar.noFilterMatch")}{" "}
                   <button
                     type="button"
                     onClick={() => setFilters(DEFAULT_RADAR_FILTERS)}
                     className="text-terminal-blue hover:underline"
                   >
-                    Reset filters
+                    {t("common.resetFilters")}
                   </button>
                 </p>
               ) : (

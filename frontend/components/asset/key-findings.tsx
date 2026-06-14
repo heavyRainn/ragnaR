@@ -1,14 +1,19 @@
+"use client";
+
 import type { AssetExplanationContext } from "@/lib/asset-explanations";
 import { Card, CardContent } from "@/components/ui/card";
+import { useI18n } from "@/lib/i18n/locale-provider";
 
 interface KeyFindingsProps {
   context: AssetExplanationContext;
 }
 
 export function KeyFindings({ context }: KeyFindingsProps) {
+  const { t } = useI18n();
+
   return (
     <section>
-      <h2 className="section-label mb-4">Key Findings</h2>
+      <h2 className="section-label mb-4">{t("asset.keyFindings")}</h2>
       <Card>
         <CardContent className="py-5">
           <ul className="space-y-3">

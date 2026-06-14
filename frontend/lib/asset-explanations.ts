@@ -1,13 +1,17 @@
-import type { AssetDetail, MarketSnapshot, Narrative, ReplayPoint, Signal } from "@/lib/api";
+import type { AssetDetail, HistoricalSignal, MarketSnapshot, Narrative, ReplayPoint, Signal } from "@/lib/api";
 import {
   formatPercent,
   formatRelativeTime,
-  formatSignalType,
-  formatDate,
   formatVolume,
   narrativeTypeLabel,
   severityFromScore,
 } from "@/lib/format";
+
+export interface AssetExplanationLocale {
+  t: (key: string, vars?: Record<string, string | number>) => string;
+  signalLabel: (type: string | null | undefined) => string;
+  formatDate: (value: string | null | undefined) => string;
+}
 
 export interface WhatChangedRow {
   label: string;
@@ -23,6 +27,8 @@ export interface ChartSignalMarker {
 
 export interface AssetExplanationContext {
   hasActiveAnomaly: boolean;
+  hasHistoricalSignals: boolean;
+  hasHistoricalOnly: boolean;
   statusHeadline: string;
   statusSubtext: string;
   activeSignalLabel: string | null;
@@ -33,7 +39,7 @@ export interface AssetExplanationContext {
   keyFindings: string[];
   whatChanged: WhatChangedRow[];
   enhancedNarrative: { title: string; paragraphs: string[] };
-  signalExplanations: { signal: Signal; details: string[] }[];
+  signalExplanations: { signal: Signal; details: string[]; summary: string | null }[];
   chartMarkers: ChartSignalMarker[];
 }
 
@@ -41,6 +47,21 @@ function topActiveSignal(signals: Signal[]): Signal | null {
   const active = signals.filter((s) => s.status === "active");
   if (active.length === 0) return null;
   return active.reduce((best, s) => (s.score > best.score ? s : best));
+}
+
+function historicalToSignal(h: HistoricalSignal): Signal {
+  return {
+    id: h.id,
+    asset_id: 0,
+    signal_type: h.signal_type,
+    score: h.peak_score,
+    severity: severityFromScore(h.peak_score),
+    status: h.status,
+    reason_json: h.reason_json ?? {},
+    metric_snapshot_json: null,
+    created_at: h.detected_at,
+    updated_at: h.resolved_at ?? h.detected_at,
+  };
 }
 
 function volumeRatioFromSignals(signals: Signal[]): number | null {
@@ -51,19 +72,21 @@ function volumeRatioFromSignals(signals: Signal[]): number | null {
   return null;
 }
 
-function statusHeadline(score: number, hasActive: boolean): string {
-  if (!hasActive) return "NO ACTIVE ANOMALIES";
-  if (score >= 80) return "CRITICAL ANOMALY DETECTED";
-  if (score >= 60) return "SIGNIFICANT ANOMALY DETECTED";
-  if (score >= 40) return "UNUSUAL ACTIVITY DETECTED";
-  return "WATCH LIST ACTIVITY";
+function statusHeadline(score: number, hasActive: boolean, locale: AssetExplanationLocale): string {
+  const { t } = locale;
+  if (!hasActive) return t("asset.noActiveAnomaliesHeadline");
+  if (score >= 80) return t("asset.statusCritical");
+  if (score >= 60) return t("asset.statusSignificant");
+  if (score >= 40) return t("asset.statusUnusual");
+  return t("asset.statusWatch");
 }
 
 function asPercentValue(value: number): number {
   return Math.abs(value) < 2 ? value * 100 : value;
 }
 
-function buildSignalExplanationDetails(signal: Signal): string[] {
+function buildSignalExplanationDetails(signal: Signal, locale: AssetExplanationLocale): string[] {
+  const { t } = locale;
   const reason = signal.reason_json ?? {};
 
   switch (signal.signal_type) {
@@ -74,11 +97,11 @@ function buildSignalExplanationDetails(signal: Signal): string[] {
       const z = Number(reason.price_z_score ?? 0);
       const threshold = Number(reason.threshold ?? 3);
       return [
-        `Current return: ${formatPercent(asPercentValue(currentReturn))}`,
-        `Baseline mean return: ${formatPercent(asPercentValue(meanReturn))}`,
-        `Baseline std: ${(asPercentValue(stdReturn)).toFixed(4)}%`,
-        `Z-score: ${z.toFixed(2)}`,
-        `Threshold: ${threshold}`,
+        t("asset.explCurrentReturn", { value: formatPercent(asPercentValue(currentReturn)) }),
+        t("asset.explBaselineMeanReturn", { value: formatPercent(asPercentValue(meanReturn)) }),
+        t("asset.explBaselineStd", { value: `${asPercentValue(stdReturn).toFixed(4)}%` }),
+        t("asset.explZScore", { value: z.toFixed(2) }),
+        t("asset.explThreshold", { value: String(threshold) }),
       ];
     }
     case "volume_shock": {
@@ -87,10 +110,10 @@ function buildSignalExplanationDetails(signal: Signal): string[] {
       const ratio = Number(reason.volume_ratio ?? 0);
       const threshold = Number(reason.threshold ?? 3);
       return [
-        `Current volume: ${formatVolume(currentVol)}`,
-        `Baseline volume: ${formatVolume(baselineVol)}`,
-        `Volume ratio: ${ratio.toFixed(2)}x`,
-        `Threshold: ${threshold}x`,
+        t("asset.explVolumeRatio", { value: `${ratio.toFixed(2)}x` }),
+        t("asset.explBaselineVolume", { value: formatVolume(baselineVol) }),
+        t("asset.explCurrentVolume", { value: formatVolume(currentVol) }),
+        t("asset.explVolumeThreshold", { value: `${threshold}x` }),
       ];
     }
     case "quiet_accumulation": {
@@ -99,37 +122,88 @@ function buildSignalExplanationDetails(signal: Signal): string[] {
       const volumeThreshold = Number(reason.volume_threshold ?? 3);
       const flatThreshold = Number(reason.price_flat_threshold ?? 2);
       return [
-        `Volume ratio: ${ratio.toFixed(2)}x (threshold ${volumeThreshold}x)`,
-        `24h change: ${formatPercent(pct)} (flat threshold ±${flatThreshold}%)`,
-        `Condition: volume elevated while price remains flat`,
-        `Current volume: ${formatVolume(reason.current_volume_24h)}`,
-        `Baseline volume: ${formatVolume(reason.baseline_volume_24h)}`,
+        t("asset.explVolumeRatio", { value: `${ratio.toFixed(2)}x` }),
+        t("asset.expl24hChange", { value: formatPercent(pct), flat: flatThreshold }),
+        t("asset.explQuietCondition"),
+        t("asset.explCurrentVolume", { value: formatVolume(reason.current_volume_24h) }),
+        t("asset.explBaselineVolume", { value: formatVolume(reason.baseline_volume_24h) }),
+        t("asset.explVolumeThreshold", { value: `${volumeThreshold}x` }),
       ];
     }
     default:
-      return ["Insufficient metric data for this signal type."];
+      return [t("asset.explInsufficientData")];
   }
 }
 
-function buildWhyFlagged(signal: Signal | null, hasActive: boolean): string[] {
-  if (!hasActive || !signal) {
+function buildSignalSummary(signal: Signal, locale: AssetExplanationLocale): string | null {
+  const { t } = locale;
+  const reason = signal.reason_json ?? {};
+
+  switch (signal.signal_type) {
+    case "volume_shock": {
+      const ratio = Number(reason.volume_ratio ?? 0);
+      if (ratio <= 0) return null;
+      return t("asset.explVolumeTriggered", { ratio: `${ratio.toFixed(2)}x` });
+    }
+    case "price_shock": {
+      const z = Number(reason.price_z_score ?? 0);
+      const threshold = Number(reason.threshold ?? 3);
+      return t("asset.explPriceTriggered", { z: z.toFixed(2), threshold: String(threshold) });
+    }
+    case "quiet_accumulation": {
+      const ratio = Number(reason.volume_ratio ?? 0);
+      const flatThreshold = Number(reason.price_flat_threshold ?? 2);
+      return t("asset.explQuietTriggered", {
+        ratio: `${ratio.toFixed(2)}x`,
+        flat: flatThreshold,
+      });
+    }
+    default:
+      return null;
+  }
+}
+
+function referenceHistoricalSignal(detail: AssetDetail): Signal | null {
+  const historical = detail.historical_signals ?? [];
+  if (historical.length > 0) {
+    return historicalToSignal(historical[0]);
+  }
+  return detail.signal_timeline[0] ?? null;
+}
+
+function buildWhyFlagged(
+  signal: Signal | null,
+  hasActive: boolean,
+  hasHistorical: boolean,
+  locale: AssetExplanationLocale
+): string[] {
+  const { t, signalLabel } = locale;
+
+  if (hasActive && signal) {
     return [
-      "Radar is not detecting unusual market behavior for this asset right now.",
-      "Price, volume, and participation metrics are within expected baseline ranges.",
+      t("asset.whyActiveIntro", { signal: signalLabel(signal.signal_type) }),
+      ...buildSignalExplanationDetails(signal, locale),
     ];
   }
 
-  return [
-    `${formatSignalType(signal.signal_type)} triggered based on measured market metrics:`,
-    ...buildSignalExplanationDetails(signal),
-  ];
+  if (hasHistorical && signal) {
+    return [
+      t("asset.whyHistoricalIntro", { signal: signalLabel(signal.signal_type) }),
+      ...buildSignalExplanationDetails(signal, locale),
+    ];
+  }
+
+  return [t("asset.whyNoActive"), t("asset.whyWithinBaseline")];
 }
 
 function buildEnhancedNarrative(
   narrative: Narrative,
   signals: Signal[],
-  hasActive: boolean
+  hasActive: boolean,
+  hasHistorical: boolean,
+  locale: AssetExplanationLocale
 ): { title: string; paragraphs: string[] } {
+  const { t } = locale;
   const activeTypes = new Set(signals.filter((s) => s.status === "active").map((s) => s.signal_type));
   const hasVolume = activeTypes.has("volume_shock") || activeTypes.has("quiet_accumulation");
   const hasPrice = activeTypes.has("price_shock");
@@ -137,63 +211,66 @@ function buildEnhancedNarrative(
   switch (narrative.type) {
     case "VOLATILITY_EVENT":
       return {
-        title: "Volatility Event",
+        title: t("asset.narrativeVolatilityTitle"),
         paragraphs: [
           "Radar detected an unusually large price movement relative to the recent baseline.",
           hasVolume
             ? "Price behavior became statistically abnormal with some volume confirmation."
             : "Price behavior became statistically abnormal while volume remained close to normal levels.",
-          hasVolume
-            ? "Both price action and market participation contributed to this anomaly."
-            : "The anomaly is primarily driven by price action rather than market participation.",
         ],
       };
     case "ACCUMULATION":
       return {
-        title: "Accumulation",
+        title: t("asset.narrativeAccumulationTitle"),
         paragraphs: [
           "Radar detected elevated trading volume with relatively stable price action.",
           "Volume is running well above baseline while price has not yet moved proportionally.",
-          "This combination often reflects positioning activity before a broader market reaction.",
         ],
       };
     case "MOMENTUM_EXPANSION":
       return {
-        title: "Momentum Expansion",
+        title: t("asset.narrativeMomentumTitle"),
         paragraphs: [
           "Radar detected simultaneous volume and price anomalies.",
           "Both participation and price movement are outside normal baseline ranges.",
-          "This pattern suggests momentum may be accelerating across the market.",
         ],
       };
     case "VOLUME_ANOMALY":
       return {
-        title: "Volume Anomaly",
+        title: t("asset.narrativeVolumeTitle"),
         paragraphs: [
           "Radar detected a significant volume surge relative to the recent baseline.",
           "Trading participation increased without a matching price shock signal.",
-          "Elevated volume may indicate building interest before a larger price move.",
         ],
       };
     case "MIXED_SIGNAL":
       return {
-        title: "Mixed Market Signals",
+        title: t("asset.narrativeMixedTitle"),
         paragraphs: [
           "Radar detected multiple overlapping anomaly patterns on this asset.",
-          "No single signal type fully explains current market behavior.",
           "Review individual signal explanations below for the complete picture.",
         ],
       };
     case "NORMAL":
     default:
+      if (hasActive) {
+        return { title: narrativeTypeLabel(narrative.type), paragraphs: [narrative.description] };
+      }
+      if (hasHistorical) {
+        return {
+          title: t("asset.normalMarketConditions"),
+          paragraphs: [
+            t("asset.narrativeNormalHistorical1"),
+            t("asset.narrativeNormalHistorical2"),
+          ],
+        };
+      }
       return {
-        title: hasActive ? narrativeTypeLabel(narrative.type) : "Normal Market Conditions",
-        paragraphs: hasActive
-          ? [narrative.description]
-          : [
-              "No significant anomalies are currently active for this asset.",
-              "Market metrics remain within expected baseline ranges based on recent history.",
-            ],
+        title: t("asset.normalMarketConditions"),
+        paragraphs: [
+          t("asset.narrativeNormalNoActive1"),
+          t("asset.narrativeNormalNoActive2"),
+        ],
       };
   }
 }
@@ -201,40 +278,41 @@ function buildEnhancedNarrative(
 function buildKeyFindings(
   detail: AssetDetail,
   hasActive: boolean,
-  topSignal: Signal | null
+  hasHistorical: boolean,
+  topSignal: Signal | null,
+  locale: AssetExplanationLocale
 ): string[] {
+  const { t } = locale;
   const findings: string[] = [];
 
   if (hasActive && topSignal) {
     switch (topSignal.signal_type) {
       case "price_shock":
-        findings.push("Price behavior exceeded historical baseline");
-        findings.push("Price Shock threshold crossed");
+        findings.push(t("asset.findingPriceBaseline"));
+        findings.push(t("asset.findingPriceThreshold"));
         break;
       case "volume_shock":
-        findings.push("Volume exceeded historical baseline");
-        findings.push("Volume Shock threshold crossed");
+        findings.push(t("asset.findingVolumeBaseline"));
+        findings.push(t("asset.findingVolumeThreshold"));
         break;
       case "quiet_accumulation":
-        findings.push("Volume rose without proportional price movement");
-        findings.push("Quiet Accumulation pattern detected");
+        findings.push(t("asset.findingQuietPattern"));
+        findings.push(t("asset.findingQuietDetected"));
         break;
     }
     if (detail.anomaly_score > 0) {
-      findings.push(`Composite score reached ${detail.anomaly_score}`);
+      findings.push(t("asset.findingCompositeScore", { score: detail.anomaly_score }));
     }
     if (detail.narrative.type !== "NORMAL") {
-      findings.push(`Narrative classified as ${narrativeTypeLabel(detail.narrative.type)}`);
+      findings.push(t("asset.findingNarrative", { narrative: narrativeTypeLabel(detail.narrative.type) }));
     }
-    findings.push("Signal currently active");
+    findings.push(t("asset.findingActive"));
+  } else if (hasHistorical) {
+    findings.push(t("asset.findingNoActive"));
+    findings.push(t("asset.findingResolved"));
   } else {
-    findings.push("No active anomaly signals");
-    if (detail.signal_timeline.length > 0) {
-      findings.push("Previous signal has faded from active state");
-    } else {
-      findings.push("No recent anomaly history on record");
-    }
-    findings.push("Signal no longer active");
+    findings.push(t("asset.findingNoActive"));
+    findings.push(t("asset.findingNoHistory"));
   }
 
   return findings;
@@ -245,23 +323,21 @@ function buildWhatChanged(
   snapshots: MarketSnapshot[],
   replayPoints: ReplayPoint[],
   prevVolumeRatio: number | null,
-  currVolumeRatio: number | null
+  currVolumeRatio: number | null,
+  locale: AssetExplanationLocale
 ): WhatChangedRow[] {
+  const { t } = locale;
   const rows: WhatChangedRow[] = [];
-  const latest = snapshots[0];
-  const previous = snapshots[1];
+  const latest = snapshots.at(-1);
+  const previous = snapshots.at(-2);
 
-  const prevReplay =
-    replayPoints.length >= 2 ? replayPoints[replayPoints.length - 2] : null;
-  const currReplay =
-    replayPoints.length >= 1 ? replayPoints[replayPoints.length - 1] : null;
-
+  const prevReplay = replayPoints.length >= 2 ? replayPoints[replayPoints.length - 2] : null;
   const prevScore = prevReplay?.anomaly_score ?? 0;
   const currScore = detail.anomaly_score;
 
   if (prevScore !== currScore || currScore > 0) {
     rows.push({
-      label: "Score",
+      label: t("asset.radarScore"),
       before: prevScore > 0 ? String(prevScore) : "0",
       after: currScore > 0 ? String(currScore) : "0",
     });
@@ -271,7 +347,7 @@ function buildWhatChanged(
   const currPct = latest?.percent_change_24h;
   if (previous && latest && prevPct != null && currPct != null) {
     rows.push({
-      label: "Price (24h)",
+      label: t("common.change24h"),
       before: formatPercent(prevPct),
       after: formatPercent(currPct),
     });
@@ -279,7 +355,7 @@ function buildWhatChanged(
 
   if (prevVolumeRatio != null || currVolumeRatio != null) {
     rows.push({
-      label: "Volume Ratio",
+      label: t("radar.volumeRatio"),
       before: prevVolumeRatio != null ? `${prevVolumeRatio.toFixed(1)}x` : "1.0x",
       after: currVolumeRatio != null ? `${currVolumeRatio.toFixed(1)}x` : "1.0x",
     });
@@ -289,7 +365,7 @@ function buildWhatChanged(
   const currNarrative = detail.narrative.type;
   if (prevNarrative !== currNarrative || currNarrative !== "NORMAL") {
     rows.push({
-      label: "Narrative",
+      label: t("asset.marketNarrative"),
       before: narrativeTypeLabel(prevNarrative),
       after: narrativeTypeLabel(currNarrative),
     });
@@ -306,11 +382,13 @@ const MARKER_COLORS: Record<string, string> = {
 
 export function buildChartMarkers(
   signals: Signal[],
-  snapshots: MarketSnapshot[]
+  snapshots: MarketSnapshot[],
+  signalLabel: (type: string) => string,
+  formatDate: (value: string | null | undefined) => string
 ): ChartSignalMarker[] {
   if (snapshots.length === 0 || signals.length === 0) return [];
 
-  const chronSnaps = [...snapshots].reverse();
+  const chronSnaps = snapshots;
   const seen = new Set<string>();
 
   return signals
@@ -334,7 +412,7 @@ export function buildChartMarkers(
       }
       return {
         time: formatDate(closest.captured_at),
-        label: formatSignalType(signal.signal_type),
+        label: signalLabel(signal.signal_type),
         color: MARKER_COLORS[signal.signal_type] ?? "#94a3b8",
       };
     });
@@ -343,15 +421,28 @@ export function buildChartMarkers(
 export function buildAssetExplanationContext(
   detail: AssetDetail,
   snapshots: MarketSnapshot[],
-  replayPoints: ReplayPoint[]
+  replayPoints: ReplayPoint[],
+  locale: AssetExplanationLocale
 ): AssetExplanationContext {
+  const { t, signalLabel, formatDate } = locale;
   const topSignal = topActiveSignal(detail.recent_signals);
+  const historical = detail.historical_signals ?? [];
+  const hasHistoricalSignals = historical.length > 0 || detail.signal_timeline.length > 0;
   const hasActiveAnomaly =
-    detail.anomaly_score > 0 &&
-    detail.recent_signals.some((s) => s.status === "active");
-  const lastTimelineSignal = detail.signal_timeline[0] ?? null;
+    detail.anomaly_score > 0 && detail.recent_signals.some((s) => s.status === "active");
+  const hasHistoricalOnly = !hasActiveAnomaly && hasHistoricalSignals;
+
+  const referenceSignal = hasActiveAnomaly
+    ? topSignal
+    : referenceHistoricalSignal(detail);
+
+  const lastTimelineSignal = historical[0]
+    ? historicalToSignal(historical[0])
+    : detail.signal_timeline[0] ?? null;
+
   const peakScore = Math.max(
     detail.anomaly_score,
+    ...historical.map((s) => s.peak_score),
     ...detail.signal_timeline.map((s) => s.score),
     0
   );
@@ -362,45 +453,71 @@ export function buildAssetExplanationContext(
       ? volumeRatioFromSignals(replayPoints[replayPoints.length - 2].signals)
       : null;
 
+  const explanationSignals: Signal[] = hasActiveAnomaly
+    ? detail.recent_signals
+    : historical.length > 0
+      ? historical.map(historicalToSignal)
+      : detail.signal_timeline;
+
   return {
     hasActiveAnomaly,
-    statusHeadline: statusHeadline(detail.anomaly_score, hasActiveAnomaly),
+    hasHistoricalSignals,
+    hasHistoricalOnly,
+    statusHeadline: statusHeadline(detail.anomaly_score, hasActiveAnomaly, locale),
     statusSubtext: hasActiveAnomaly
-      ? "Radar currently detects unusual market behavior."
-      : "Previous anomaly has faded.",
-    activeSignalLabel: topSignal ? formatSignalType(topSignal.signal_type) : null,
+      ? t("asset.statusSubtextActive")
+      : hasHistoricalOnly
+        ? t("asset.historicalActivityHint")
+        : t("asset.statusSubtextFaded"),
+    activeSignalLabel: topSignal ? signalLabel(topSignal.signal_type) : null,
     detectedAt: topSignal ? formatRelativeTime(topSignal.created_at) : null,
-    lastSignalLabel: lastTimelineSignal
-      ? formatSignalType(lastTimelineSignal.signal_type)
-      : null,
+    lastSignalLabel: lastTimelineSignal ? signalLabel(lastTimelineSignal.signal_type) : null,
     peakScore,
-    whyFlaggedParagraphs: buildWhyFlagged(topSignal, hasActiveAnomaly),
-    keyFindings: buildKeyFindings(detail, hasActiveAnomaly, topSignal),
+    whyFlaggedParagraphs: buildWhyFlagged(
+      referenceSignal,
+      hasActiveAnomaly,
+      hasHistoricalSignals,
+      locale
+    ),
+    keyFindings: buildKeyFindings(
+      detail,
+      hasActiveAnomaly,
+      hasHistoricalSignals,
+      topSignal,
+      locale
+    ),
     whatChanged: buildWhatChanged(
       detail,
       snapshots,
       replayPoints,
       prevVolumeRatio,
-      currVolumeRatio
+      currVolumeRatio,
+      locale
     ),
     enhancedNarrative: buildEnhancedNarrative(
       detail.narrative,
       detail.recent_signals,
-      hasActiveAnomaly
+      hasActiveAnomaly,
+      hasHistoricalSignals,
+      locale
     ),
-    signalExplanations: (hasActiveAnomaly ? detail.recent_signals : detail.signal_timeline.slice(0, 3)).map(
-      (signal) => ({
-        signal,
-        details: buildSignalExplanationDetails(signal),
-      })
+    signalExplanations: explanationSignals.map((signal) => ({
+      signal,
+      details: buildSignalExplanationDetails(signal, locale),
+      summary: buildSignalSummary(signal, locale),
+    })),
+    chartMarkers: buildChartMarkers(
+      explanationSignals.length > 0 ? explanationSignals : detail.signal_timeline,
+      snapshots,
+      signalLabel,
+      formatDate
     ),
-    chartMarkers: buildChartMarkers(detail.signal_timeline, snapshots),
   };
 }
 
 export function statusAccentClass(score: number, hasActive: boolean): string {
   if (!hasActive) return "border-radar-border bg-radar-elevated/40";
-  const sev = severityFromScore(score);
+  const sev = score >= 80 ? "critical" : score >= 60 ? "significant" : score >= 40 ? "watch" : "normal";
   switch (sev) {
     case "critical":
       return "border-terminal-red/40 bg-terminal-red/5";

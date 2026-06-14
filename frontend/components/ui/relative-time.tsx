@@ -1,6 +1,6 @@
 "use client";
 
-import { formatRelativeTime } from "@/lib/format";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { useMinuteTick } from "@/lib/hooks/use-minute-tick";
 
 interface RelativeTimeProps {
@@ -10,5 +10,6 @@ interface RelativeTimeProps {
 
 export function RelativeTime({ value, className }: RelativeTimeProps) {
   useMinuteTick();
+  const { formatRelativeTime } = useI18n();
   return <span className={className}>{formatRelativeTime(value)}</span>;
 }

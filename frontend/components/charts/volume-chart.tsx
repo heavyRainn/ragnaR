@@ -12,7 +12,9 @@ import {
 } from "recharts";
 import type { ChartSignalMarker } from "@/lib/asset-explanations";
 import type { MarketSnapshot } from "@/lib/api";
+import { chartVolumeUnit, chartVolumeValue } from "@/lib/chart-volume";
 import { formatDate, formatVolume } from "@/lib/format";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { ChartEmptyState } from "./chart-empty-state";
 
 interface VolumeChartProps {
@@ -21,16 +23,24 @@ interface VolumeChartProps {
 }
 
 export function VolumeChart({ snapshots, markers = [] }: VolumeChartProps) {
+  const { t } = useI18n();
+
   if (snapshots.length < 2) {
     return <ChartEmptyState />;
   }
 
-  const data = [...snapshots]
-    .reverse()
-    .map((s) => ({
-      time: formatDate(s.captured_at),
-      volume: parseFloat(s.volume_24h),
-    }));
+  const unit = chartVolumeUnit(snapshots);
+  const volumeLabel = unit === "1m" ? t("asset.chartVolume1m") : t("asset.chartVolume24h");
+
+  const data = snapshots.map((s) => ({
+    time: formatDate(s.captured_at),
+    volume: chartVolumeValue(s),
+  }));
+
+  const nonZero = data.filter((d) => d.volume > 0);
+  if (nonZero.length < 1) {
+    return <ChartEmptyState />;
+  }
 
   return (
     <div className="relative h-72 w-full">
@@ -43,6 +53,7 @@ export function VolumeChart({ snapshots, markers = [] }: VolumeChartProps) {
             tick={{ fontSize: 11 }}
             tickFormatter={(v) => formatVolume(v)}
             width={80}
+            domain={[0, "auto"]}
           />
           <Tooltip
             contentStyle={{
@@ -51,7 +62,7 @@ export function VolumeChart({ snapshots, markers = [] }: VolumeChartProps) {
               borderRadius: "6px",
             }}
             labelStyle={{ color: "#94a3b8" }}
-            formatter={(value: number) => [formatVolume(value), "Volume 24h"]}
+            formatter={(value) => [formatVolume(Number(value)), volumeLabel]}
           />
           {markers.map((marker) => (
             <ReferenceLine

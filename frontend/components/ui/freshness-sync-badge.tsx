@@ -1,7 +1,8 @@
 "use client";
 
 import type { SystemStatus } from "@/lib/api";
-import { formatRelativeTime, syncAgeSeconds } from "@/lib/format";
+import { syncAgeSeconds } from "@/lib/format";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { useSecondTick } from "@/lib/hooks/use-second-tick";
 import { cn } from "@/lib/utils";
 
@@ -33,13 +34,14 @@ function resolveFreshness(status: SystemStatus | null): FreshnessLevel {
 }
 
 export function FreshnessSyncBadge({ status, assetCount, refreshing }: FreshnessSyncBadgeProps) {
+  const { t, formatRelativeTime } = useI18n();
   useSecondTick();
 
   const level = resolveFreshness(status);
   const isLive = status?.data_source === "live";
   const topN = status?.cmc_listings_limit ?? assetCount;
   const syncedAt = status?.last_successful_sync_at ?? status?.last_market_sync_at ?? null;
-  const syncedLabel = syncedAt ? formatRelativeTime(syncedAt) : "never";
+  const syncedLabel = syncedAt ? formatRelativeTime(syncedAt) : t("common.never");
 
   return (
     <div
@@ -69,27 +71,27 @@ export function FreshnessSyncBadge({ status, assetCount, refreshing }: Freshness
               level === "error" && "text-terminal-red"
             )}
           >
-            {isLive ? "LIVE" : "MOCK"}
+            {isLive ? t("freshness.live") : t("freshness.mock")}
           </span>
         </span>
         {isLive && (
           <>
             <span className="text-radar-muted">·</span>
-            <span className="text-white">Top {topN}</span>
+            <span className="text-white">{t("common.top", { n: topN })}</span>
           </>
         )}
         <span className="text-radar-muted">·</span>
-        <span className="text-radar-muted">synced {syncedLabel}</span>
+        <span className="text-radar-muted">{t("common.synced", { time: syncedLabel })}</span>
       </div>
 
       {level === "stale" && (
         <p className="text-[10px] font-semibold uppercase tracking-wide text-terminal-amber">
-          Warning: Live data stale
+          {t("freshness.staleWarning")}
         </p>
       )}
       {level === "error" && (
         <p className="max-w-xs text-right text-[10px] font-semibold uppercase tracking-wide text-terminal-red">
-          Error: CMC sync failed
+          {t("freshness.syncFailed")}
           {status?.last_sync_error ? ` — ${status.last_sync_error}` : ""}
         </p>
       )}

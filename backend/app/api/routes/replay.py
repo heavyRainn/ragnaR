@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.models.signal import Signal
 from app.schemas.replay import ReplayOut
 from app.services.asset_access import get_trackable_asset
 from app.services.recent_events_service import get_default_replay_symbol, resolve_replay_symbol
@@ -19,12 +21,26 @@ def get_replay_default_symbol(db: Session = Depends(get_db)) -> dict[str, str]:
 
 
 @router.get("/{symbol}", response_model=ReplayOut)
-def get_replay(symbol: str, db: Session = Depends(get_db)) -> ReplayOut:
+def get_replay(
+    symbol: str,
+    signal_id: int | None = Query(None, description="Focus replay on a specific persisted signal"),
+    db: Session = Depends(get_db),
+) -> ReplayOut:
     resolved = resolve_replay_symbol(db, symbol)
     asset = get_trackable_asset(db, resolved)
 
     points = build_replay_for_asset(db, asset)
-    reference_signal = get_reference_signal_for_asset(db, asset.id)
+
+    reference_signal: Signal | None = None
+    if signal_id is not None:
+        reference_signal = db.execute(
+            select(Signal).where(Signal.id == signal_id, Signal.asset_id == asset.id)
+        ).scalar_one_or_none()
+        if reference_signal is None:
+            raise HTTPException(status_code=404, detail="Signal not found for this asset")
+
+    if reference_signal is None:
+        reference_signal = get_reference_signal_for_asset(db, asset.id)
 
     return ReplayOut(
         symbol=asset.symbol,

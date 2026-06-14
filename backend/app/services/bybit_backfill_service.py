@@ -4,17 +4,23 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.asset import Asset
 from app.models.market_snapshot import MarketSnapshot
-from app.signals.helpers import count_snapshots
+from app.services.snapshot_history_service import (
+    HISTORY_WINDOW_MINUTES,
+    align_snapshot_timestamp,
+)
 
 logger = logging.getLogger(__name__)
 
 BYBIT_KLINE_URL = "https://api.bybit.com/v5/market/kline"
+REQUIRED_BACKFILL_CANDLES = HISTORY_WINDOW_MINUTES
+
+VOLUME_SOURCE_BYBIT = "bybit_1m"
 
 # Stablecoins — no spot kline backfill needed.
 SKIP_BACKFILL_SYMBOLS = frozenset(
@@ -24,10 +30,10 @@ SKIP_BACKFILL_SYMBOLS = frozenset(
 # Privacy / exchange-specific tokens commonly absent from Bybit spot.
 UNSUPPORTED_ON_BYBIT_SPOT = frozenset(
     {
-        "LEO",  # Bitfinex token — not on Bybit
-        "XMR",  # Monero — delisted on most CEX spot books
+        "LEO",
+        "XMR",
         "DASH",
-        "ZEC",  # Often unavailable or empty on Bybit spot
+        "ZEC",
         "XVG",
         "ARRR",
         "BEAM",
@@ -35,7 +41,6 @@ UNSUPPORTED_ON_BYBIT_SPOT = frozenset(
     }
 )
 
-# CMC symbol → Bybit spot pair when ticker differs.
 BYBIT_PAIR_OVERRIDES: dict[str, str] = {
     "RENDER": "RNDRUSDT",
     "POL": "MATICUSDT",
@@ -116,7 +121,7 @@ def fetch_bybit_klines(symbol: str) -> list[dict] | None:
 
                 if candles:
                     logger.info("Bybit klines loaded for %s via %s (%s candles)", symbol, pair, len(candles))
-                    return candles
+                    return candles[-REQUIRED_BACKFILL_CANDLES:]
 
                 last_error = error
     except httpx.HTTPError as exc:
@@ -132,59 +137,75 @@ def fetch_bybit_klines(symbol: str) -> list[dict] | None:
     return None
 
 
+def fetch_latest_bybit_turnover(symbol: str) -> Decimal | None:
+    candles = fetch_bybit_klines(symbol)
+    if not candles:
+        return None
+    turnover = candles[-1].get("turnover")
+    if turnover is None:
+        return None
+    return max(Decimal(turnover), Decimal("0"))
+
+
 def backfill_asset_from_bybit(db: Session, asset: Asset) -> bool:
+    if asset.history_backfilled:
+        return True
+
     candles = fetch_bybit_klines(asset.symbol)
     if not candles:
         return False
 
-    existing_count = count_snapshots(db, asset.id)
-    if existing_count > 1:
-        logger.info("Bybit backfill skipped for %s — already has %s snapshots", asset.symbol, existing_count)
-        return True
+    db.execute(delete(MarketSnapshot).where(MarketSnapshot.asset_id == asset.id))
 
-    prev_close: Decimal | None = None
     inserted = 0
+    seen_minutes: set[datetime] = set()
 
     for candle in candles:
-        captured_at = datetime.fromtimestamp(candle["timestamp_ms"] / 1000, tz=timezone.utc)
+        captured_at = align_snapshot_timestamp(
+            datetime.fromtimestamp(candle["timestamp_ms"] / 1000, tz=timezone.utc)
+        )
+        if captured_at in seen_minutes:
+            continue
+        seen_minutes.add(captured_at)
+
         close = candle["close"]
         turnover = candle["turnover"]
-
-        if prev_close and prev_close > 0:
-            step_pct = ((close - prev_close) / prev_close) * Decimal("100")
-        else:
-            step_pct = Decimal("0")
 
         snapshot = MarketSnapshot(
             asset_id=asset.id,
             price=close,
-            volume_24h=max(turnover, Decimal("0")),
+            volume_24h=Decimal("0"),
+            volume_1m=max(turnover, Decimal("0")),
+            volume_source=VOLUME_SOURCE_BYBIT,
             market_cap=None,
-            percent_change_1h=step_pct,
-            percent_change_24h=step_pct,
+            percent_change_1h=None,
+            percent_change_24h=None,
             percent_change_7d=None,
             cmc_rank=asset.rank,
             captured_at=captured_at,
         )
         db.add(snapshot)
-        prev_close = close
         inserted += 1
 
     db.flush()
     logger.info("Bybit backfill inserted %s snapshots for %s", inserted, asset.symbol)
-    return inserted >= 21
+    return inserted >= REQUIRED_BACKFILL_CANDLES
 
 
 def backfill_new_assets(db: Session) -> int:
+    """Batch backfill for assets missed during inline sync (safety net)."""
     if not settings.BYBIT_BACKFILL_ENABLED or not settings.is_live_data:
         return 0
+
+    from app.services.cmc_service import fetch_quotes_by_ids, parse_quote
+    from app.services.cmc_snapshot_sync import upsert_cmc_snapshot
 
     pending = (
         db.execute(
             select(Asset)
             .where(
                 Asset.is_active.is_(True),
-                Asset.history_backfill_attempted.is_(False),
+                Asset.history_backfilled.is_(False),
             )
             .order_by(Asset.rank.nulls_last(), Asset.symbol)
         )
@@ -197,6 +218,7 @@ def backfill_new_assets(db: Session) -> int:
 
     batch = pending[: settings.BYBIT_BACKFILL_BATCH_SIZE]
     success_count = 0
+    backfilled_assets: list[Asset] = []
     delay_sec = settings.BYBIT_BACKFILL_REQUEST_DELAY_MS / 1000.0
 
     for index, asset in enumerate(batch):
@@ -205,11 +227,28 @@ def backfill_new_assets(db: Session) -> int:
             if backfill_asset_from_bybit(db, asset):
                 asset.history_backfilled = True
                 success_count += 1
+                backfilled_assets.append(asset)
         except Exception:
             logger.exception("Bybit backfill failed for %s", asset.symbol)
 
         if index < len(batch) - 1 and delay_sec > 0:
             time.sleep(delay_sec)
 
-    db.commit()
+    if success_count and settings.CMC_API_KEY:
+        now = datetime.now(timezone.utc)
+        cmc_ids = [a.cmc_id for a in backfilled_assets if a.cmc_id is not None]
+        if cmc_ids:
+            try:
+                raw = fetch_quotes_by_ids(settings.CMC_API_KEY, cmc_ids)
+                for asset in backfilled_assets:
+                    if asset.cmc_id is None:
+                        continue
+                    parsed = parse_quote(asset.cmc_id, raw)
+                    if parsed:
+                        upsert_cmc_snapshot(db, asset, parsed, now)
+            except Exception:
+                logger.exception("Failed to apply CMC quotes after batch backfill")
+
+    if success_count:
+        db.commit()
     return success_count

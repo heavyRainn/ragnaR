@@ -1,5 +1,7 @@
-import { formatDate, formatSignalType } from "@/lib/format";
+"use client";
+
 import type { Signal } from "@/lib/api";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { cn } from "@/lib/utils";
 import { ScoreBadge } from "./score-badge";
 
@@ -8,8 +10,10 @@ interface SignalTimelineProps {
 }
 
 export function SignalTimeline({ signals }: SignalTimelineProps) {
+  const { t, signalLabel, formatDate } = useI18n();
+
   if (signals.length === 0) {
-    return <p className="text-sm text-cmc-muted">No signal history yet.</p>;
+    return <p className="text-sm text-cmc-muted">{t("asset.noSignalHistory")}</p>;
   }
 
   return (
@@ -33,7 +37,7 @@ export function SignalTimeline({ signals }: SignalTimelineProps) {
           <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium text-cmc-text">
-                {formatSignalType(signal.signal_type)}
+                {signalLabel(signal.signal_type)}
               </span>
               <StatusPill status={signal.status} />
             </div>
@@ -46,7 +50,15 @@ export function SignalTimeline({ signals }: SignalTimelineProps) {
 }
 
 function StatusPill({ status }: { status: string }) {
+  const { t } = useI18n();
   const isActive = status === "active";
+  const label =
+    status === "active"
+      ? t("status.active")
+      : status === "resolved"
+        ? t("status.resolved")
+        : status;
+
   return (
     <span
       className={cn(
@@ -56,7 +68,7 @@ function StatusPill({ status }: { status: string }) {
           : "border-radar-border bg-radar-elevated text-radar-muted"
       )}
     >
-      {isActive ? "active" : status}
+      {label}
     </span>
   );
 }

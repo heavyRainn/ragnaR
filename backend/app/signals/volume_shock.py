@@ -22,14 +22,18 @@ def evaluate_volume_shock_candidate(
     if skip and ratio is None:
         return {"triggered": False, "skip_reason": skip}
 
+    if skip and ratio is not None:
+        return {"triggered": False, "skip_reason": skip}
+
     if ratio is None or ratio < VOLUME_SHOCK_THRESHOLD:
         return {"triggered": False, "skip_reason": skip or "below_threshold"}
 
     score = compute_volume_shock_score(ratio)
     reason = {
-        "current_volume_24h": float(latest.volume_24h),
+        "current_volume_24h": volume_metrics.get("current_volume_24h") or float(latest.volume_24h),
         "baseline_volume_24h": baseline_vol,
         "volume_ratio": round(ratio, 4),
+        "volume_unit": volume_metrics.get("volume_unit"),
         "threshold": VOLUME_SHOCK_THRESHOLD,
         "snapshot_count": snapshot_count,
     }

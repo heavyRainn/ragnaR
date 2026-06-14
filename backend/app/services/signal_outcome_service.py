@@ -167,12 +167,19 @@ def compute_replay_quick_indices(
     signal_detected: int | None = None
     sig_time = signal.created_at
 
+    closest_by_type: int | None = None
+    closest_type_diff = float("inf")
     for index, point in enumerate(points):
-        if any(s.signal_type == signal.signal_type for s in point.signals):
-            signal_detected = index
-            break
+        if not any(s.signal_type == signal.signal_type for s in point.signals):
+            continue
+        diff = abs((point.timestamp - sig_time).total_seconds())
+        if diff < closest_type_diff:
+            closest_type_diff = diff
+            closest_by_type = index
 
-    if signal_detected is None:
+    if closest_by_type is not None:
+        signal_detected = closest_by_type
+    else:
         closest_index = 0
         closest_diff = float("inf")
         for index, point in enumerate(points):

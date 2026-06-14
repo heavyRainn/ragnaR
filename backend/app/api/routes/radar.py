@@ -50,6 +50,7 @@ def get_radar(db: Session = Depends(get_db)) -> list[RadarItemOut]:
                 price=latest_snapshot.price if latest_snapshot else None,
                 volume_24h=latest_snapshot.volume_24h if latest_snapshot else None,
                 market_cap=latest_snapshot.market_cap if latest_snapshot else None,
+                percent_change_1h=latest_snapshot.percent_change_1h if latest_snapshot else None,
                 percent_change_24h=latest_snapshot.percent_change_24h if latest_snapshot else None,
                 anomaly_score=get_anomaly_score(db, asset.id),
                 severity=get_composite_severity(db, asset.id),

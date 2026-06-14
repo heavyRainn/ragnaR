@@ -1,10 +1,11 @@
+"use client";
+
 import type { SignalOutcome } from "@/lib/api";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { cn } from "@/lib/utils";
 import {
-  formatDate,
   formatPercent,
   formatPrice,
-  formatSignalType,
   percentColor,
 } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,23 +25,33 @@ function outcomeStyles(outcome: SignalOutcome["outcome"]): string {
   }
 }
 
-function statusLabel(status: string): string {
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
 export function SignalOutcomeCard({ outcome }: SignalOutcomeCardProps) {
+  const { t, signalLabel, formatDate, messages } = useI18n();
+
+  const outcomeText =
+    outcome.outcome in messages.outcomes
+      ? messages.outcomes[outcome.outcome as keyof typeof messages.outcomes]
+      : outcome.outcome;
+
+  const statusText =
+    outcome.current_status === "active"
+      ? t("status.active")
+      : outcome.current_status === "resolved"
+        ? t("status.resolved")
+        : outcome.current_status;
+
   return (
     <section className="mb-8">
-      <h2 className="section-label mb-4">Signal Outcome</h2>
+      <h2 className="section-label mb-4">{t("asset.signalOutcome")}</h2>
       <Card>
         <CardContent className="py-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="font-mono text-lg font-semibold text-cmc-text">
-                {formatSignalType(outcome.signal_type)}
+                {signalLabel(outcome.signal_type)}
               </p>
               <p className="mt-1 font-mono text-xs text-radar-muted">
-                Score {outcome.signal_score} · {statusLabel(outcome.current_status)}
+                {t("asset.scoreStatus", { score: outcome.signal_score, status: statusText })}
               </p>
             </div>
             <div
@@ -49,16 +60,16 @@ export function SignalOutcomeCard({ outcome }: SignalOutcomeCardProps) {
                 outcomeStyles(outcome.outcome)
               )}
             >
-              Outcome: {outcome.outcome}
+              {t("asset.outcomeLabel", { value: outcomeText })}
             </div>
           </div>
 
           <dl className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <OutcomeItem label="Detected" value={formatDate(outcome.detected_at)} />
-            <OutcomeItem label="Price at Signal" value={formatPrice(outcome.price_at_signal)} />
-            <OutcomeItem label="Current Price" value={formatPrice(outcome.current_price)} />
+            <OutcomeItem label={t("asset.detected")} value={formatDate(outcome.detected_at)} />
+            <OutcomeItem label={t("asset.priceAtSignal")} value={formatPrice(outcome.price_at_signal)} />
+            <OutcomeItem label={t("asset.currentPrice")} value={formatPrice(outcome.current_price)} />
             <OutcomeItem
-              label="Move after Signal"
+              label={t("asset.moveAfterSignalLabel")}
               value={formatPercent(outcome.move_after_signal_percent)}
               valueClass={percentColor(outcome.move_after_signal_percent)}
               highlight
@@ -66,24 +77,26 @@ export function SignalOutcomeCard({ outcome }: SignalOutcomeCardProps) {
           </dl>
 
           <div className="mt-6 border-t border-radar-border pt-6">
-            <p className="text-[11px] uppercase tracking-wider text-radar-muted">Signal Performance</p>
+            <p className="text-[11px] uppercase tracking-wider text-radar-muted">
+              {t("asset.signalPerformance")}
+            </p>
             <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <OutcomeItem
-                label="Max Move after Signal"
+                label={t("asset.maxMoveAfterSignal")}
                 value={formatPercent(outcome.max_move_after_signal)}
                 valueClass={percentColor(outcome.max_move_after_signal)}
               />
               <OutcomeItem
-                label="Worst Move"
+                label={t("asset.worstMove")}
                 value={formatPercent(outcome.worst_move_after_signal)}
                 valueClass={percentColor(outcome.worst_move_after_signal)}
               />
               <OutcomeItem
-                label="Best Price"
+                label={t("asset.bestPrice")}
                 value={formatPrice(outcome.best_price_after_signal)}
               />
               <OutcomeItem
-                label="Worst Price"
+                label={t("asset.worstPrice")}
                 value={formatPrice(outcome.worst_price_after_signal)}
               />
             </dl>

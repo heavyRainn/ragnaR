@@ -1,18 +1,23 @@
+"use client";
+
 import type { AssetExplanationContext } from "@/lib/asset-explanations";
 import { Card, CardContent } from "@/components/ui/card";
+import { useI18n } from "@/lib/i18n/locale-provider";
 
 interface WhatChangedProps {
   context: AssetExplanationContext;
 }
 
 export function WhatChanged({ context }: WhatChangedProps) {
+  const { t } = useI18n();
+
   if (context.whatChanged.length === 0) {
     return (
       <section>
-        <h2 className="section-label mb-4">What Changed</h2>
+        <h2 className="section-label mb-4">{t("asset.whatChanged")}</h2>
         <Card>
           <CardContent className="py-5">
-            <p className="text-sm text-cmc-muted">No significant changes from the previous snapshot.</p>
+            <p className="text-sm text-cmc-muted">{t("asset.noSignificantChanges")}</p>
           </CardContent>
         </Card>
       </section>
@@ -21,7 +26,7 @@ export function WhatChanged({ context }: WhatChangedProps) {
 
   return (
     <section>
-      <h2 className="section-label mb-4">What Changed</h2>
+      <h2 className="section-label mb-4">{t("asset.whatChanged")}</h2>
       <Card className="border-terminal-amber/20">
         <CardContent className="divide-y divide-radar-border py-0">
           {context.whatChanged.map((row) => (

@@ -1,11 +1,16 @@
+"use client";
+
+import type { ReactNode } from "react";
 import type { RadarItem } from "@/lib/api";
-import { formatSignalType } from "@/lib/format";
+import { AssetIdentity } from "@/components/ui/asset-identity";
+import { useI18n } from "@/lib/i18n/locale-provider";
 
 interface RadarSummaryProps {
   items: RadarItem[];
 }
 
 export function RadarSummary({ items }: RadarSummaryProps) {
+  const { t, signalLabel } = useI18n();
   const activeSignals = items.filter((i) => i.anomaly_score > 0).length;
   const avgScore =
     items.length > 0
@@ -16,15 +21,23 @@ export function RadarSummary({ items }: RadarSummaryProps) {
     null
   );
 
-  const stats = [
-    { label: "Tracked Assets", value: String(items.length) },
-    { label: "Active Signals", value: String(activeSignals) },
-    { label: "Avg Anomaly Score", value: String(avgScore) },
+  const stats: { label: string; value: ReactNode }[] = [
+    { label: t("radar.trackedAssets"), value: String(items.length) },
+    { label: t("radar.activeSignals"), value: String(activeSignals) },
+    { label: t("radar.avgAnomalyScore"), value: String(avgScore) },
     {
-      label: "Highest Signal",
-      value: highest && highest.anomaly_score > 0
-        ? `${highest.asset.symbol} · ${formatSignalType(highest.main_signal)} (${highest.anomaly_score})`
-        : "—",
+      label: t("radar.highestSignal"),
+      value:
+        highest && highest.anomaly_score > 0 ? (
+          <span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <AssetIdentity symbol={highest.asset.symbol} size="xs" layout="symbol" />
+            <span className="truncate font-mono text-sm text-radar-muted">
+              {signalLabel(highest.main_signal)} ({highest.anomaly_score})
+            </span>
+          </span>
+        ) : (
+          "—"
+        ),
     },
   ];
 
@@ -36,7 +49,7 @@ export function RadarSummary({ items }: RadarSummaryProps) {
           className="rounded-lg border border-radar-border bg-radar-card px-4 py-3"
         >
           <p className="text-xs uppercase tracking-wider text-cmc-muted">{stat.label}</p>
-          <p className="mt-1 truncate font-mono text-lg font-semibold text-cmc-text">{stat.value}</p>
+          <div className="mt-1 truncate font-mono text-lg font-semibold text-cmc-text">{stat.value}</div>
         </div>
       ))}
     </div>

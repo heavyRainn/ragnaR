@@ -10,6 +10,7 @@ from app.schemas.asset import AssetDetailOut, AssetOut, MarketSnapshotOut
 from app.schemas.score import ScoreBreakdownOut
 from app.schemas.signal import SignalOut
 from app.services.asset_access import get_trackable_asset
+from app.services.historical_signal_service import build_historical_signals
 from app.services.narrative_service import classify_narrative
 from app.services.signal_outcome_service import compute_signal_outcome
 from app.services.signal_service import (
@@ -58,4 +59,5 @@ def get_asset(symbol: str, db: Session = Depends(get_db)) -> AssetDetailOut:
         snapshot_count=count_snapshots(db, asset.id),
         required_snapshot_count=MIN_SNAPSHOTS,
         signal_outcome=compute_signal_outcome(db, asset.id),
+        historical_signals=build_historical_signals(db, asset.id),
     )
