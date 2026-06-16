@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import assets, debug, market_rotation, radar, replay, signals, snapshots, system
+from app.api.routes import assets, debug, market_rotation, market_story, opportunities, radar, replay, sectors, signals, snapshots, system
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.services.market_data_service import (
@@ -65,6 +65,9 @@ app.include_router(signals.router)
 app.include_router(replay.router)
 app.include_router(radar.router)
 app.include_router(market_rotation.router)
+app.include_router(market_story.router)
+app.include_router(opportunities.router)
+app.include_router(sectors.router)
 
 
 @app.get("/health")

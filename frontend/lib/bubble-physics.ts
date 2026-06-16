@@ -78,53 +78,35 @@ function clampSpeed(node: SimBubble): void {
 }
 
 /** Cap extreme % moves so one outlier does not dominate the whole map. */
-const SIZE_PERCENT_CAP = 12;
-const SIZE_PERCENT_CAP_1H = 8;
+const SIZE_PERCENT_CAP = 8;
 
-/** Final viewport multiplier per mode (1h is denser — smaller bubbles). */
+/** Final viewport multiplier per mode (1h slightly denser than 24h). */
 const MODE_RADIUS_SCALE: Record<BubbleViewMode, number> = {
-  "1h": 0.6,
-  "24h": 1,
-  performance: 1,
-  radar: 1,
+  "1h": 0.68,
+  "24h": 1.08,
 };
 
-function normalizedPerfMetric(change: number, mode: BubbleViewMode): number {
-  const cap = mode === "1h" ? SIZE_PERCENT_CAP_1H : SIZE_PERCENT_CAP;
-  const exp = mode === "1h" ? 0.72 : 0.82;
-  const abs = Math.min(Math.abs(change), cap);
-  return Math.max(Math.pow(abs, exp), mode === "1h" ? 0.06 : 0.1);
+/** Modest global bump — larger bubbles, same circular dynamic layout. */
+const BUBBLE_RADIUS_BOOST = 1.12;
+
+function normalizedPerfMetric(change: number): number {
+  const abs = Math.min(Math.abs(change), SIZE_PERCENT_CAP);
+  return Math.max(Math.pow(abs, 0.72), 0.06);
 }
 
-function sizingMetric(
-  item: RadarItem,
-  mode: BubbleViewMode,
-  _signalCounts: Record<string, number>
-): number {
+function sizingMetric(item: RadarItem, mode: BubbleViewMode): number {
   const change1h = parseFloat(item.percent_change_1h ?? "0") || 0;
   const change24h = parseFloat(item.percent_change_24h ?? "0") || 0;
-
-  switch (mode) {
-    case "1h":
-      return normalizedPerfMetric(change1h, mode);
-    case "24h":
-    case "performance":
-      return normalizedPerfMetric(change24h, mode);
-    case "radar":
-      return Math.max(item.anomaly_score, 1);
-    default:
-      return normalizedPerfMetric(change24h, mode);
-  }
+  return normalizedPerfMetric(mode === "1h" ? change1h : change24h);
 }
 
-function sizeCurve(t: number, mode: BubbleViewMode): number {
+function sizeCurve(t: number): number {
   const clamped = Math.min(1, Math.max(0, t));
-  const power = mode === "radar" ? 0.68 : mode === "1h" ? 0.4 : 0.55;
-  return Math.pow(clamped, power);
+  return Math.pow(clamped, 0.4);
 }
 
-function baseRadiusFromNormalized(t: number, _symbol: string, _mode: BubbleViewMode): number {
-  const curved = sizeCurve(t, _mode);
+function baseRadiusFromNormalized(t: number): number {
+  const curved = sizeCurve(t);
   return MIN_RADIUS + curved * (MAX_RADIUS - MIN_RADIUS);
 }
 
@@ -141,11 +123,11 @@ export function scaleRadiiToViewport(
   const area = width * height;
   const minDim = Math.min(width, height);
   const modeScale = MODE_RADIUS_SCALE[viewMode] ?? 1;
-  const targetFill = Math.min(0.82, 0.54 + n * 0.0032);
+  const targetFill = Math.min(0.84, 0.56 + n * 0.0034);
   const sumArea = nodes.reduce((sum, node) => sum + Math.PI * node.targetRadius * node.targetRadius, 0);
 
-  const maxR = minDim * (n > 42 ? 0.17 : n > 28 ? 0.19 : 0.22);
-  const minR = minDim * (n > 42 ? 0.034 : 0.038);
+  const maxR = minDim * (n > 42 ? 0.18 : n > 28 ? 0.2 : 0.23);
+  const minR = minDim * (n > 42 ? 0.036 : 0.04);
 
   const scale = Math.sqrt((area * targetFill) / (sumArea || 1));
   for (const node of nodes) {
@@ -170,7 +152,7 @@ export function scaleRadiiToViewport(
   }
 
   for (const node of nodes) {
-    node.targetRadius *= modeScale;
+    node.targetRadius *= modeScale * BUBBLE_RADIUS_BOOST;
     node.radius = node.targetRadius;
     node.mass = Math.max(0.85, node.targetRadius / 38);
   }
@@ -183,16 +165,16 @@ export function buildSimBubbles(
 ): SimBubble[] {
   if (items.length === 0) return [];
 
-  const metrics = items.map((item) => sizingMetric(item, viewMode, signalCounts));
+  const metrics = items.map((item) => sizingMetric(item, viewMode));
   const min = Math.min(...metrics);
   const max = Math.max(...metrics);
   const span = max - min || 1;
 
   return items.map((item) => {
     const sym = item.asset.symbol;
-    const metric = sizingMetric(item, viewMode, signalCounts);
+    const metric = sizingMetric(item, viewMode);
     const t = (metric - min) / span;
-    const targetRadius = baseRadiusFromNormalized(t, sym, viewMode);
+    const targetRadius = baseRadiusFromNormalized(t);
     const mcap = parseFloat(item.market_cap ?? "0") || 0;
     const count = signalCounts[sym] ?? (item.anomaly_score > 0 ? 1 : 0);
 
@@ -643,6 +625,39 @@ export function settleBubbleLayout(nodes: SimBubble[], width: number, height: nu
     node.displayX = node.x;
     node.displayY = node.y;
   }
+}
+
+/** Scale positions and radii when the viewport changes — avoids full repack jitter. */
+export function resizeBubbleLayout(
+  nodes: SimBubble[],
+  oldWidth: number,
+  oldHeight: number,
+  newWidth: number,
+  newHeight: number,
+  viewMode: BubbleViewMode = "24h"
+): void {
+  if (nodes.length === 0 || oldWidth <= 0 || oldHeight <= 0 || newWidth <= 0 || newHeight <= 0) {
+    return;
+  }
+
+  const scaleX = newWidth / oldWidth;
+  const scaleY = newHeight / oldHeight;
+  const cxOld = oldWidth / 2;
+  const cyOld = oldHeight / 2;
+  const cxNew = newWidth / 2;
+  const cyNew = newHeight / 2;
+
+  for (const node of nodes) {
+    node.x = cxNew + (node.x - cxOld) * scaleX;
+    node.y = cyNew + (node.y - cyOld) * scaleY;
+    node.displayX = cxNew + (node.displayX - cxOld) * scaleX;
+    node.displayY = cyNew + (node.displayY - cyOld) * scaleY;
+    node.vx *= 0.25;
+    node.vy *= 0.25;
+  }
+
+  scaleRadiiToViewport(nodes, newWidth, newHeight, viewMode);
+  settleBubbleLayout(nodes, newWidth, newHeight);
 }
 
 export function smoothBubbleDisplay(nodes: SimBubble[], hoveredId: string | null): void {

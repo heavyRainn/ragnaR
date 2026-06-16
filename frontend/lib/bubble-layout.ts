@@ -1,5 +1,5 @@
 /** Visual sizing mode — does not change API data. */
-export type BubbleViewMode = "1h" | "24h" | "performance" | "radar";
+export type BubbleViewMode = "1h" | "24h";
 
 export const SECTOR_COLORS: Record<string, string> = {
   AI: "rgba(59, 130, 246, 0.12)",

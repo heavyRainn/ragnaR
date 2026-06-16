@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils";
 const REFRESH_INTERVAL_MS = 60_000;
 
 export default function AssetDetailPage() {
-  const { t, signalLabel, formatDate } = useI18n();
+  const { t, signalLabel, narrativeLabel, formatDate } = useI18n();
   const params = useParams();
   const symbol = (params.symbol as string).toUpperCase();
 
@@ -95,10 +95,11 @@ export default function AssetDetailPage() {
         ? buildAssetExplanationContext(detail, snapshots, replayPoints, {
             t,
             signalLabel,
+            narrativeLabel,
             formatDate,
           })
         : null,
-    [detail, snapshots, replayPoints, t, signalLabel, formatDate]
+    [detail, snapshots, replayPoints, t, signalLabel, narrativeLabel, formatDate]
   );
 
   if (loading) {

@@ -23,8 +23,6 @@ export default function AssetsPage() {
   const viewModes: { id: BubbleViewMode; label: string }[] = [
     { id: "1h", label: t("assets.view1h") },
     { id: "24h", label: t("assets.view24h") },
-    { id: "performance", label: t("assets.viewPerf") },
-    { id: "radar", label: t("assets.viewRadar") },
   ];
 
   const signalCounts = useMemo(() => {
@@ -45,9 +43,9 @@ export default function AssetsPage() {
   return (
     <main className="min-h-screen bg-radar-bg">
       <div className="mx-auto max-w-[100%]">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-radar-border px-3 py-3 sm:px-5">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-sans text-lg font-bold text-cmc-text sm:text-xl">{t("assets.title")}</h1>
+        <header className="flex flex-col gap-3 border-b border-radar-border px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <h1 className="font-sans text-base font-bold text-cmc-text sm:text-xl">{t("assets.title")}</h1>
             <DataSourceBadge />
             <FreshnessSyncBadge
               status={systemStatus ?? null}
@@ -64,7 +62,7 @@ export default function AssetsPage() {
                   type="button"
                   onClick={() => setViewMode(mode.id)}
                   className={cn(
-                    "rounded px-2.5 py-1 font-sans text-xs font-semibold uppercase tracking-wide transition-colors",
+                    "min-w-[44px] rounded px-3 py-1.5 font-sans text-xs font-semibold uppercase tracking-wide transition-colors",
                     viewMode === mode.id
                       ? "bg-terminal-blue/20 text-terminal-blue"
                       : "text-radar-muted hover:text-cmc-text"
@@ -80,7 +78,7 @@ export default function AssetsPage() {
               placeholder={t("common.search")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-[140px] rounded-md border border-radar-border bg-radar-card/60 px-3 py-1.5 font-sans text-sm text-cmc-text placeholder:text-radar-muted focus:border-terminal-blue/50 focus:outline-none sm:w-[180px]"
+              className="min-w-0 flex-1 rounded-md border border-radar-border bg-radar-card/60 px-3 py-1.5 font-sans text-sm text-cmc-text placeholder:text-radar-muted focus:border-terminal-blue/50 focus:outline-none sm:w-[180px] sm:flex-none"
             />
 
             <Link
@@ -93,7 +91,9 @@ export default function AssetsPage() {
         </header>
 
         {loading && !items && (
-          <p className="py-20 text-center text-radar-muted">{t("assets.loading")}</p>
+          <div className="flex h-[calc(100dvh-132px)] min-h-[280px] items-center justify-center">
+            <p className="text-radar-muted">{t("assets.loading")}</p>
+          </div>
         )}
         {error && (
           <p className="py-8 text-center text-terminal-red">

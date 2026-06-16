@@ -1,5 +1,7 @@
+"use client";
+
 import type { Narrative } from "@/lib/api";
-import { narrativeTypeLabel } from "@/lib/format";
+import { useI18n } from "@/lib/i18n/locale-provider";
 import { Card, CardContent } from "@/components/ui/card";
 
 interface NarrativeBlockProps {
@@ -8,10 +10,13 @@ interface NarrativeBlockProps {
 }
 
 export function NarrativeBlock({ narrative, variant = "default" }: NarrativeBlockProps) {
+  const { narrativeLabel } = useI18n();
+  const label = narrativeLabel(narrative.type);
+
   if (variant === "compact") {
     return (
       <span className="rounded border border-radar-border bg-radar-elevated px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-terminal-blue">
-        {narrativeTypeLabel(narrative.type)}
+        {label}
       </span>
     );
   }
@@ -20,7 +25,7 @@ export function NarrativeBlock({ narrative, variant = "default" }: NarrativeBloc
     <Card>
       <CardContent className="py-5">
         <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-terminal-blue">
-          {narrativeTypeLabel(narrative.type)}
+          {label}
         </p>
         <h3 className="mt-2 text-xl font-semibold text-cmc-text">{narrative.title}</h3>
         <p className="mt-3 text-sm leading-relaxed text-cmc-muted">{narrative.description}</p>

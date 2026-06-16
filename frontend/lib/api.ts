@@ -154,14 +154,20 @@ export interface SectorRotation {
   sector: string;
   average_radar_score: number;
   average_24h_change: number;
+  average_1h_change: number;
   active_signals_count: number;
   assets_count: number;
+  trend: "strengthening" | "weakening" | "neutral" | string;
 }
 
 export interface MarketRotation {
   leader_sector: string | null;
   lagging_sector: string | null;
   most_active_sector: string | null;
+  strongest_sector: string | null;
+  weakest_sector: string | null;
+  best_1h_sector: string | null;
+  worst_1h_sector: string | null;
   market_narrative: string;
   sectors: SectorRotation[];
 }
@@ -174,6 +180,65 @@ export interface RecentMarketEvent {
   status: string;
   detected_at: string;
   move_after_signal_percent: number | null;
+}
+
+export interface MarketStoryItem {
+  key: string;
+  params: Record<string, string | number>;
+}
+
+export interface MarketStory {
+  headline_key: string;
+  stories: MarketStoryItem[];
+}
+
+export interface OpportunityFeedItem {
+  id: number;
+  asset_symbol: string;
+  asset_name: string;
+  sector: string | null;
+  signal_type: string;
+  score: number;
+  severity: string;
+  status: string;
+  detected_at: string;
+}
+
+export interface SectorAsset {
+  asset: Asset;
+  anomaly_score: number;
+  main_signal: string | null;
+}
+
+export interface SectorDetail {
+  sector: string;
+  radar_score: number;
+  average_score: number;
+  active_signals_count: number;
+  assets_count: number;
+  average_24h_change: number;
+  narrative: string;
+  top_assets: SectorAsset[];
+  active_signals: Signal[];
+  is_market_leader: boolean;
+}
+
+export interface SectorReplayPoint {
+  timestamp: string;
+  sector_score: number;
+  active_signals_count: number;
+  assets_in_sector: number;
+}
+
+export interface SectorReplay {
+  sector: string;
+  points: SectorReplayPoint[];
+  score_start: number | null;
+  score_end: number | null;
+  score_change: number | null;
+  leader_sector_start: string | null;
+  leader_sector_end: string | null;
+  narrative: string;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -195,6 +260,11 @@ export const api = {
   getSignals: () => fetchApi<Signal[]>("/api/signals"),
   getRecentMarketEvents: () => fetchApi<RecentMarketEvent[]>("/api/signals/recent"),
   getMarketRotation: () => fetchApi<MarketRotation>("/api/market-rotation"),
+  getMarketStory: () => fetchApi<MarketStory>("/api/market-story"),
+  getOpportunities: (limit = 20) => fetchApi<OpportunityFeedItem[]>(`/api/opportunities?limit=${limit}`),
+  getSector: (sector: string) => fetchApi<SectorDetail>(`/api/sectors/${encodeURIComponent(sector)}`),
+  getSectorReplay: (sector: string) =>
+    fetchApi<SectorReplay>(`/api/replay/sector/${encodeURIComponent(sector)}`),
   getReplayDefaultSymbol: () => fetchApi<{ symbol: string }>("/api/replay/default-symbol"),
   getReplay: (symbol: string, signalId?: number) =>
     fetchApi<ReplayResponse>(

@@ -4,7 +4,10 @@ from sqlalchemy.orm import Session
 from app.models.asset import Asset
 from app.models.market_snapshot import MarketSnapshot
 from app.schemas.market_rotation import MarketRotationOut, SectorRotationOut
-from app.services.market_narrative_service import build_market_narrative
+from app.services.capital_rotation_narrative import (
+    build_capital_rotation_narrative,
+    compute_sector_trend,
+)
 from app.services.sector_mapping import SECTORS, resolve_sector
 from app.services.signal_service import get_active_signals_for_asset, get_anomaly_score
 
@@ -30,7 +33,8 @@ def build_market_rotation(db: Session) -> MarketRotationOut:
     sector_buckets: dict[str, dict] = {
         sector: {
             "scores": [],
-            "changes": [],
+            "changes_24h": [],
+            "changes_1h": [],
             "active_signals": 0,
             "assets_count": 0,
         }
@@ -43,7 +47,8 @@ def build_market_rotation(db: Session) -> MarketRotationOut:
             sector = "Other"
             sector_buckets.setdefault("Other", {
                 "scores": [],
-                "changes": [],
+                "changes_24h": [],
+                "changes_1h": [],
                 "active_signals": 0,
                 "assets_count": 0,
             })
@@ -54,7 +59,9 @@ def build_market_rotation(db: Session) -> MarketRotationOut:
 
         snapshot = _latest_snapshot(db, asset.id)
         if snapshot and snapshot.percent_change_24h is not None:
-            bucket["changes"].append(float(snapshot.percent_change_24h))
+            bucket["changes_24h"].append(float(snapshot.percent_change_24h))
+        if snapshot and snapshot.percent_change_1h is not None:
+            bucket["changes_1h"].append(float(snapshot.percent_change_1h))
 
         active = get_active_signals_for_asset(db, asset.id)
         bucket["active_signals"] += len(active)
@@ -64,50 +71,63 @@ def build_market_rotation(db: Session) -> MarketRotationOut:
         if bucket["assets_count"] == 0:
             continue
         avg_score = round(sum(bucket["scores"]) / len(bucket["scores"]), 1)
-        avg_change = (
-            round(sum(bucket["changes"]) / len(bucket["changes"]), 2)
-            if bucket["changes"]
+        avg_change_24h = (
+            round(sum(bucket["changes_24h"]) / len(bucket["changes_24h"]), 2)
+            if bucket["changes_24h"]
+            else 0.0
+        )
+        avg_change_1h = (
+            round(sum(bucket["changes_1h"]) / len(bucket["changes_1h"]), 2)
+            if bucket["changes_1h"]
             else 0.0
         )
         sectors.append(
             SectorRotationOut(
                 sector=sector,
                 average_radar_score=avg_score,
-                average_24h_change=avg_change,
+                average_24h_change=avg_change_24h,
+                average_1h_change=avg_change_1h,
                 active_signals_count=bucket["active_signals"],
                 assets_count=bucket["assets_count"],
+                trend=compute_sector_trend(avg_change_24h, avg_change_1h),
             )
         )
 
-    sectors.sort(key=lambda s: s.average_radar_score, reverse=True)
+    sectors.sort(key=lambda s: s.average_24h_change, reverse=True)
 
-    ranked = [s for s in sectors if s.sector in TRACKED_SECTORS]
-    pool = ranked if ranked else sectors
+    pool = [s for s in sectors if s.sector in TRACKED_SECTORS]
+    if not pool:
+        pool = [s for s in sectors if s.sector != "Other"]
+    if not pool:
+        pool = sectors
 
-    leader_sector = max(pool, key=lambda s: s.average_radar_score).sector if pool else None
-    lagging_sector = min(pool, key=lambda s: s.average_radar_score).sector if pool else None
+    strongest_sector = max(pool, key=lambda s: s.average_24h_change).sector if pool else None
+    weakest_sector = min(pool, key=lambda s: s.average_24h_change).sector if pool else None
+    best_1h_sector = max(pool, key=lambda s: s.average_1h_change).sector if pool else None
+    worst_1h_sector = min(pool, key=lambda s: s.average_1h_change).sector if pool else None
     most_active_sector = (
         max(pool, key=lambda s: s.active_signals_count).sector if pool else None
     )
 
-    market_avg_score = (
-        round(sum(s.average_radar_score * s.assets_count for s in sectors) / sum(s.assets_count for s in sectors), 1)
-        if sectors
-        else 0.0
-    )
+    leader_sector = strongest_sector
+    lagging_sector = weakest_sector
 
-    market_narrative = build_market_narrative(
-        leader_sector=leader_sector,
-        lagging_sector=lagging_sector,
-        most_active_sector=most_active_sector,
-        sectors=sectors,
-        market_average_score=market_avg_score,
+    market_narrative = build_capital_rotation_narrative(
+        sectors,
+        strongest_sector=strongest_sector,
+        weakest_sector=weakest_sector,
+        best_1h_sector=best_1h_sector,
+        worst_1h_sector=worst_1h_sector,
     )
 
     return MarketRotationOut(
         leader_sector=leader_sector,
         lagging_sector=lagging_sector,
         most_active_sector=most_active_sector,
+        strongest_sector=strongest_sector,
+        weakest_sector=weakest_sector,
+        best_1h_sector=best_1h_sector,
+        worst_1h_sector=worst_1h_sector,
         market_narrative=market_narrative,
         sectors=sectors,
     )

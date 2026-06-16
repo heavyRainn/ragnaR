@@ -5,9 +5,11 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.signal import Signal
 from app.schemas.replay import ReplayOut
+from app.schemas.sector_replay import SectorReplayOut
 from app.services.asset_access import get_trackable_asset
 from app.services.recent_events_service import get_default_replay_symbol, resolve_replay_symbol
 from app.services.replay_service import build_replay_for_asset
+from app.services.sector_replay_service import build_sector_replay
 from app.services.signal_outcome_service import compute_replay_quick_indices, get_reference_signal_for_asset
 from app.signals.common import MIN_SNAPSHOTS
 from app.signals.helpers import count_snapshots
@@ -18,6 +20,14 @@ router = APIRouter(prefix="/api/replay", tags=["replay"])
 @router.get("/default-symbol")
 def get_replay_default_symbol(db: Session = Depends(get_db)) -> dict[str, str]:
     return {"symbol": get_default_replay_symbol(db)}
+
+
+@router.get("/sector/{sector}", response_model=SectorReplayOut)
+def get_sector_replay(sector: str, db: Session = Depends(get_db)) -> SectorReplayOut:
+    replay = build_sector_replay(db, sector)
+    if replay is None:
+        raise HTTPException(status_code=404, detail="Sector not found")
+    return replay
 
 
 @router.get("/{symbol}", response_model=ReplayOut)

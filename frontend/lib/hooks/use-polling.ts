@@ -13,11 +13,15 @@ export function usePolling<T>(
   const [error, setError] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const fetcherRef = useRef(fetcher);
+  const dataRef = useRef<T | null>(null);
 
   fetcherRef.current = fetcher;
+  dataRef.current = data;
 
   const refresh = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+    const hasData = dataRef.current !== null;
+    if (!silent && !hasData) setLoading(true);
+
     try {
       const result = await fetcherRef.current();
       setData(result);
@@ -26,7 +30,7 @@ export function usePolling<T>(
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
-      if (!silent) setLoading(false);
+      if (!silent || !hasData) setLoading(false);
     }
   }, []);
 

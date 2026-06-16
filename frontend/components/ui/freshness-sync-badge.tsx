@@ -17,6 +17,10 @@ type FreshnessLevel = "ok" | "stale" | "error";
 function resolveFreshness(status: SystemStatus | null): FreshnessLevel {
   if (!status) return "stale";
 
+  if (status.data_source === "mock") {
+    return "ok";
+  }
+
   if (status.last_sync_status === "failed" && !status.last_successful_sync_at) {
     return "error";
   }

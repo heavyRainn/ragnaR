@@ -16,7 +16,10 @@ import {
   getMessages,
   signalTypeKey,
   severityKey,
+  sectorKey,
+  narrativeTypeKey,
   translate,
+  translateMarketNarrative,
   type Locale,
   type Messages,
 } from "@/lib/i18n";
@@ -29,6 +32,10 @@ interface LocaleContextValue {
   t: (key: string, vars?: Record<string, string | number>) => string;
   signalLabel: (type: string | null | undefined) => string;
   severityLabel: (severity: string) => string;
+  sectorLabel: (sector: string | null | undefined) => string;
+  narrativeLabel: (type: string | null | undefined) => string;
+  translateMarketNarrative: (text: string) => string;
+  localizeStoryParams: (params: Record<string, string | number>) => Record<string, string | number>;
   formatRelativeTime: (value: string | Date | null | undefined) => string;
   formatDate: (value: string | null | undefined) => string;
 }
@@ -77,6 +84,26 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
       severityLabel: (severity) => {
         const key = severityKey(severity);
         return key ? messages.severity[key] : severity;
+      },
+      sectorLabel: (sector) => {
+        const key = sectorKey(sector);
+        return key ? messages.sectors[key] : sector ?? "—";
+      },
+      narrativeLabel: (type) => {
+        const key = narrativeTypeKey(type);
+        return key ? messages.narratives[key] : type ?? "—";
+      },
+      translateMarketNarrative: (text) => translateMarketNarrative(messages, text),
+      localizeStoryParams: (params) => {
+        const out: Record<string, string | number> = { ...params };
+        for (const field of ["sector", "from", "to"] as const) {
+          const value = out[field];
+          if (typeof value === "string") {
+            const key = sectorKey(value);
+            if (key) out[field] = messages.sectors[key];
+          }
+        }
+        return out;
       },
       formatRelativeTime: (v) => formatRelativeTimeLocalized(messages, v),
       formatDate: (v) => formatDateLocalized(v, locale === "ru" ? "ru-RU" : "en-US"),

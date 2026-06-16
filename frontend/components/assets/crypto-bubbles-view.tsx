@@ -16,6 +16,7 @@ import {
   formatBubblePercent,
   initPackedLayout,
   mergeSimBubbles,
+  resizeBubbleLayout,
   scaleRadiiToViewport,
   smoothBubbleDisplay,
   stepPhysics,
@@ -33,6 +34,7 @@ interface CryptoBubblesViewProps {
 
 const HOVER_GRACE_MS = 280;
 const CARD_SMOOTH = 0.12;
+const RESIZE_DEBOUNCE_MS = 150;
 
 export function CryptoBubblesView({
   items,
@@ -56,6 +58,7 @@ export function CryptoBubblesView({
   const sizeRef = useRef({ width: 0, height: 0 });
   const frameRef = useRef(0);
   const layoutSizeRef = useRef({ width: 0, height: 0 });
+  const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [hovered, setHovered] = useState<SimBubble | null>(null);
@@ -95,10 +98,25 @@ export function CryptoBubblesView({
 
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
-      setSize({ width, height });
+      sizeRef.current = { width, height };
+
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+      resizeTimerRef.current = setTimeout(() => {
+        setSize({ width, height });
+      }, RESIZE_DEBOUNCE_MS);
     });
     observer.observe(el);
-    return () => observer.disconnect();
+
+    const rect = el.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      sizeRef.current = { width: rect.width, height: rect.height };
+      setSize({ width: rect.width, height: rect.height });
+    }
+
+    return () => {
+      observer.disconnect();
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+    };
   }, []);
 
   const layoutViewModeRef = useRef<BubbleViewMode>(viewMode);
@@ -108,22 +126,34 @@ export function CryptoBubblesView({
 
     const prev = nodesRef.current;
     const merged = mergeSimBubbles(prev, bubbleDefs);
+    const oldSize = layoutSizeRef.current;
     const sizeChanged =
-      layoutSizeRef.current.width !== size.width ||
-      layoutSizeRef.current.height !== size.height;
+      oldSize.width > 0 &&
+      oldSize.height > 0 &&
+      (oldSize.width !== size.width || oldSize.height !== size.height);
     const viewModeChanged = layoutViewModeRef.current !== viewMode;
+    const hasPositions = merged.some((node) => node.x !== 0 || node.y !== 0);
 
     const needsFullLayout =
       prev.length === 0 ||
       merged.length !== prev.length ||
-      merged.every((node) => node.x === 0 && node.y === 0) ||
-      sizeChanged ||
+      !hasPositions ||
       viewModeChanged;
 
     if (needsFullLayout) {
       initPackedLayout(merged, size.width, size.height, viewMode);
       layoutSizeRef.current = { width: size.width, height: size.height };
       layoutViewModeRef.current = viewMode;
+    } else if (sizeChanged) {
+      resizeBubbleLayout(
+        merged,
+        oldSize.width,
+        oldSize.height,
+        size.width,
+        size.height,
+        viewMode
+      );
+      layoutSizeRef.current = { width: size.width, height: size.height };
     } else {
       scaleRadiiToViewport(merged, size.width, size.height, viewMode);
     }
@@ -264,7 +294,7 @@ export function CryptoBubblesView({
 
   if (filtered.length === 0) {
     return (
-      <div className="flex h-[calc(100vh-168px)] min-h-[480px] items-center justify-center bg-radar-bg">
+      <div className="flex h-[calc(100dvh-132px)] min-h-[280px] items-center justify-center bg-radar-bg sm:min-h-[360px] md:min-h-[420px]">
         <p className="text-sm text-cmc-muted">{t("assets.noSearchMatch")}</p>
       </div>
     );
@@ -273,7 +303,7 @@ export function CryptoBubblesView({
   return (
     <div
       ref={containerRef}
-      className="relative h-[calc(100vh-168px)] min-h-[480px] w-full overflow-hidden bg-radar-bg"
+      className="relative h-[calc(100dvh-132px)] min-h-[280px] w-full touch-pan-y overflow-hidden bg-radar-bg sm:min-h-[360px] md:min-h-[420px]"
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}
     >

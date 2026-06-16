@@ -1,8 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import type { MarketRotation, SectorRotation } from "@/lib/api";
+import {
+  displaySectors,
+  resolveCapitalRotationStory,
+  trendLabel,
+} from "@/lib/capital-rotation-story";
 import { useI18n } from "@/lib/i18n/locale-provider";
-import { formatPercent, scoreStyles } from "@/lib/format";
+import { formatPercent, percentColorStrong } from "@/lib/format";
+import { sectorPath } from "@/lib/sector-path";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -10,163 +17,79 @@ interface CapitalRotationProps {
   data: MarketRotation;
 }
 
-const DISPLAY_SECTORS = new Set([
-  "AI",
-  "DeFi",
-  "Layer1",
-  "Meme",
-  "Gaming",
-  "Infrastructure",
-  "RWA",
-]);
-
-function topSectors(sectors: SectorRotation[]): SectorRotation[] {
-  return sectors
-    .filter((s) => DISPLAY_SECTORS.has(s.sector))
-    .slice(0, 3);
-}
-
-function barSectors(sectors: SectorRotation[]): SectorRotation[] {
-  return sectors.filter((s) => DISPLAY_SECTORS.has(s.sector));
-}
-
 export function CapitalRotation({ data }: CapitalRotationProps) {
-  const { t } = useI18n();
-  const top = topSectors(data.sectors);
-  const bars = barSectors(data.sectors);
-  const maxScore = Math.max(...bars.map((s) => s.average_radar_score), 1);
+  const { t, sectorLabel } = useI18n();
+  const sectors = displaySectors(data.sectors);
+  const story = resolveCapitalRotationStory(data, t, sectorLabel);
 
   return (
     <section className="mb-8">
-      <h2 className="section-label mb-4">{t("capitalRotation.title")}</h2>
+      <div className="mb-4">
+        <h2 className="section-label">{t("capitalRotation.title")}</h2>
+        <p className="mt-1 text-sm text-cmc-muted">{t("capitalRotation.subtitle")}</p>
+      </div>
 
       <Card className="mb-4 border-terminal-blue/20 bg-terminal-blue/[0.03]">
         <CardContent className="py-5">
           <p className="text-[11px] uppercase tracking-wider text-radar-muted">
-            {t("capitalRotation.marketNarrative")}
+            {t("capitalRotation.marketStory")}
           </p>
           <p className="mt-2 font-mono text-base font-semibold leading-relaxed text-cmc-text sm:text-lg">
-            {data.market_narrative}
+            {story}
           </p>
-          <div className="mt-4 flex flex-wrap gap-3 font-mono text-xs text-radar-muted">
-            {data.leader_sector && (
-              <span className="rounded border border-terminal-green/30 bg-terminal-green/5 px-2 py-1 text-terminal-green">
-                {t("capitalRotation.leader", { sector: data.leader_sector })}
-              </span>
-            )}
-            {data.lagging_sector && data.lagging_sector !== data.leader_sector && (
-              <span className="rounded border border-radar-border px-2 py-1">
-                {t("capitalRotation.lagging", { sector: data.lagging_sector })}
-              </span>
-            )}
-            {data.most_active_sector && (
-              <span className="rounded border border-terminal-amber/30 bg-terminal-amber/5 px-2 py-1 text-terminal-amber">
-                {t("capitalRotation.mostActive", { sector: data.most_active_sector })}
-              </span>
-            )}
-          </div>
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div>
-          <h3 className="mb-3 font-mono text-xs uppercase tracking-wider text-radar-muted">
-            {t("capitalRotation.topSectors")}
-          </h3>
-          <div className="space-y-3">
-            {top.map((sector) => (
-              <SectorCard key={sector.sector} sector={sector} highlight />
+      {sectors.length === 0 ? (
+        <p className="text-sm text-cmc-muted">{t("capitalRotation.noSectorData")}</p>
+      ) : (
+        <Card>
+          <CardContent className="divide-y divide-radar-border p-0">
+            {sectors.map((sector) => (
+              <SectorRow key={sector.sector} sector={sector} />
             ))}
-            {top.length === 0 && (
-              <p className="text-sm text-cmc-muted">{t("capitalRotation.noSectorData")}</p>
-            )}
-          </div>
-        </div>
-
-        <div>
-          <h3 className="mb-3 font-mono text-xs uppercase tracking-wider text-radar-muted">
-            {t("capitalRotation.sectorRadarScore")}
-          </h3>
-          <Card>
-            <CardContent className="space-y-4 py-5">
-              {bars.map((sector) => {
-                const widthPct = Math.max(4, (sector.average_radar_score / maxScore) * 100);
-                const styles = scoreStyles(Math.round(sector.average_radar_score));
-                return (
-                  <div key={sector.sector}>
-                    <div className="mb-1.5 flex items-center justify-between gap-2 font-mono text-xs">
-                      <span className="font-semibold text-cmc-text">{sector.sector}</span>
-                      <span className={cn("tabular-nums", styles.text)}>
-                        {sector.average_radar_score.toFixed(1)}
-                      </span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-radar-elevated">
-                      <div
-                        className={cn("h-full rounded-full transition-all", styles.bar)}
-                        style={{ width: `${widthPct}%` }}
-                      />
-                    </div>
-                    <div className="mt-1 flex gap-4 font-mono text-[10px] text-radar-muted">
-                      <span>{t("capitalRotation.signalCount", { count: sector.active_signals_count })}</span>
-                      <span>{t("capitalRotation.avgChange", { value: formatPercent(sector.average_24h_change) })}</span>
-                      <span>{t("capitalRotation.assetCount", { count: sector.assets_count })}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+          </CardContent>
+        </Card>
+      )}
     </section>
   );
 }
 
-function SectorCard({
-  sector,
-  highlight,
-}: {
-  sector: SectorRotation;
-  highlight?: boolean;
-}) {
-  const { t } = useI18n();
-  const styles = scoreStyles(Math.round(sector.average_radar_score));
+function SectorRow({ sector }: { sector: SectorRotation }) {
+  const { t, sectorLabel } = useI18n();
+  const trend = trendLabel(sector.trend, t);
 
   return (
-    <Card className={highlight ? "border-radar-border" : undefined}>
-      <CardContent className="py-4">
-        <div className="flex items-start justify-between gap-3">
-          <p className="font-mono text-sm font-semibold text-cmc-text">{sector.sector}</p>
-          <span
-            className={cn(
-              "rounded border px-2 py-0.5 font-mono text-xs font-semibold tabular-nums",
-              styles.badge
-            )}
-          >
-            {sector.average_radar_score.toFixed(1)}
-          </span>
+    <Link
+      href={sectorPath(sector.sector)}
+      className="block px-4 py-4 transition-colors hover:bg-radar-elevated/40 sm:px-5"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="font-mono text-sm font-semibold text-cmc-text sm:text-base">
+            {sectorLabel(sector.sector)}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs sm:text-sm">
+            <span className={cn("tabular-nums", percentColorStrong(sector.average_24h_change))}>
+              {formatPercent(sector.average_24h_change)}{" "}
+              <span className="text-radar-muted">({t("capitalRotation.change24h")})</span>
+            </span>
+            <span className={cn("tabular-nums", percentColorStrong(sector.average_1h_change))}>
+              {formatPercent(sector.average_1h_change)}{" "}
+              <span className="text-radar-muted">({t("capitalRotation.change1h")})</span>
+            </span>
+          </div>
+          <p className="mt-2 font-mono text-[11px] text-radar-muted sm:text-xs">
+            {t("capitalRotation.assetCount", { count: sector.assets_count })}
+            <span className="mx-2 text-radar-border">·</span>
+            {t("capitalRotation.signalCount", { count: sector.active_signals_count })}
+          </p>
         </div>
-        <dl className="mt-3 grid grid-cols-3 gap-2 font-mono text-xs">
-          <div>
-            <dt className="text-radar-muted">{t("capitalRotation.avgScore")}</dt>
-            <dd className={cn("mt-0.5 font-semibold tabular-nums", styles.text)}>
-              {sector.average_radar_score.toFixed(1)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-radar-muted">{t("capitalRotation.signalsLabel")}</dt>
-            <dd className="mt-0.5 font-semibold tabular-nums text-cmc-text">
-              {sector.active_signals_count}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-radar-muted">{t("radar.sortChange")}</dt>
-            <dd className="mt-0.5 font-semibold tabular-nums text-cmc-text">
-              {formatPercent(sector.average_24h_change)}
-            </dd>
-          </div>
-        </dl>
-      </CardContent>
-    </Card>
+        <div className={cn("shrink-0 text-right font-mono text-xs sm:text-sm", trend.className)}>
+          <span className="text-base font-semibold sm:text-lg">{trend.icon}</span>{" "}
+          <span className="font-medium">{trend.label}</span>
+        </div>
+      </div>
+    </Link>
   );
 }

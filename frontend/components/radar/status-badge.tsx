@@ -1,13 +1,13 @@
 "use client";
 
 import type { RadarItem } from "@/lib/api";
-import { narrativeTypeLabel } from "@/lib/format";
 import { useI18n } from "@/lib/i18n/locale-provider";
 import { cn } from "@/lib/utils";
 
 function resolveRadarStatus(
   item: RadarItem,
   signalLabel: (type: string | null | undefined) => string,
+  narrativeLabel: (type: string | null | undefined) => string,
   normalLabel: string
 ): string {
   if (item.anomaly_score === 0) return normalLabel;
@@ -15,9 +15,9 @@ function resolveRadarStatus(
   const narrativeType = item.narrative?.type;
 
   if (narrativeType === "VOLATILITY_EVENT") return signalLabel("price_shock");
-  if (narrativeType === "VOLUME_ANOMALY") return "Volume Anomaly";
+  if (narrativeType === "VOLUME_ANOMALY") return narrativeLabel("VOLUME_ANOMALY");
   if (narrativeType && narrativeType !== "NORMAL" && narrativeType !== "MIXED_SIGNAL") {
-    return narrativeTypeLabel(narrativeType);
+    return narrativeLabel(narrativeType);
   }
 
   if (item.main_signal) {
@@ -33,9 +33,9 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ item, className }: StatusBadgeProps) {
-  const { signalLabel, t } = useI18n();
+  const { signalLabel, narrativeLabel, t } = useI18n();
   const normalLabel = t("severity.normal");
-  const label = resolveRadarStatus(item, signalLabel, normalLabel);
+  const label = resolveRadarStatus(item, signalLabel, narrativeLabel, normalLabel);
   const isNormal = item.anomaly_score === 0;
 
   return (

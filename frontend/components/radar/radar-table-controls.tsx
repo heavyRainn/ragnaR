@@ -25,18 +25,19 @@ export function RadarTableControls({
 
   return (
     <div className="mb-4 space-y-3">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         <input
           type="search"
           placeholder={t("common.searchAsset")}
           value={filters.search}
           onChange={(e) => set({ search: e.target.value })}
-          className={`min-w-[200px] flex-1 ${selectClass}`}
+          className={`w-full sm:min-w-[200px] sm:flex-1 ${selectClass}`}
         />
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
         <select
           value={filters.signalType}
           onChange={(e) => set({ signalType: e.target.value as SignalFilter })}
-          className={selectClass}
+          className={`w-full ${selectClass}`}
         >
           <option value="all">{t("radar.allSignals")}</option>
           <option value="volume_shock">{t("signals.volume_shock")}</option>
@@ -47,7 +48,7 @@ export function RadarTableControls({
         <select
           value={filters.severity}
           onChange={(e) => set({ severity: e.target.value as SeverityFilter })}
-          className={selectClass}
+          className={`w-full ${selectClass}`}
         >
           <option value="all">{t("severity.all")}</option>
           <option value="critical">{t("severity.criticalRange")}</option>
@@ -58,7 +59,7 @@ export function RadarTableControls({
         <select
           value={filters.sortBy}
           onChange={(e) => set({ sortBy: e.target.value as SortField })}
-          className={selectClass}
+          className={`w-full ${selectClass}`}
         >
           <option value="score">{t("radar.sortScore")}</option>
           <option value="percent_change_1h">{t("radar.sortChange1h")}</option>
@@ -69,7 +70,7 @@ export function RadarTableControls({
         <button
           type="button"
           onClick={() => set({ sortDesc: !filters.sortDesc })}
-          className={`${selectClass} font-mono text-xs`}
+          className={`w-full sm:w-auto ${selectClass} font-mono text-xs`}
           title={t("radar.toggleSort")}
         >
           {filters.sortDesc ? t("common.desc") : t("common.asc")}
@@ -80,11 +81,12 @@ export function RadarTableControls({
           <button
             type="button"
             onClick={() => onChange(DEFAULT_RADAR_FILTERS)}
-            className="text-sm text-terminal-blue hover:underline"
+            className="col-span-2 text-sm text-terminal-blue hover:underline sm:col-span-1"
           >
             {t("common.reset")}
           </button>
         )}
+        </div>
       </div>
       <p className="text-xs text-radar-muted">
         {t("common.showingOf", { filtered: filteredCount, total: totalCount })}

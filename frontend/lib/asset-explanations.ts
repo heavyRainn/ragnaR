@@ -3,13 +3,13 @@ import {
   formatPercent,
   formatRelativeTime,
   formatVolume,
-  narrativeTypeLabel,
   severityFromScore,
 } from "@/lib/format";
 
 export interface AssetExplanationLocale {
   t: (key: string, vars?: Record<string, string | number>) => string;
   signalLabel: (type: string | null | undefined) => string;
+  narrativeLabel: (type: string | null | undefined) => string;
   formatDate: (value: string | null | undefined) => string;
 }
 
@@ -73,7 +73,7 @@ function volumeRatioFromSignals(signals: Signal[]): number | null {
 }
 
 function statusHeadline(score: number, hasActive: boolean, locale: AssetExplanationLocale): string {
-  const { t } = locale;
+  const { t, narrativeLabel } = locale;
   if (!hasActive) return t("asset.noActiveAnomaliesHeadline");
   if (score >= 80) return t("asset.statusCritical");
   if (score >= 60) return t("asset.statusSignificant");
@@ -86,7 +86,7 @@ function asPercentValue(value: number): number {
 }
 
 function buildSignalExplanationDetails(signal: Signal, locale: AssetExplanationLocale): string[] {
-  const { t } = locale;
+  const { t, narrativeLabel } = locale;
   const reason = signal.reason_json ?? {};
 
   switch (signal.signal_type) {
@@ -136,7 +136,7 @@ function buildSignalExplanationDetails(signal: Signal, locale: AssetExplanationL
 }
 
 function buildSignalSummary(signal: Signal, locale: AssetExplanationLocale): string | null {
-  const { t } = locale;
+  const { t, narrativeLabel } = locale;
   const reason = signal.reason_json ?? {};
 
   switch (signal.signal_type) {
@@ -203,7 +203,7 @@ function buildEnhancedNarrative(
   hasHistorical: boolean,
   locale: AssetExplanationLocale
 ): { title: string; paragraphs: string[] } {
-  const { t } = locale;
+  const { t, narrativeLabel } = locale;
   const activeTypes = new Set(signals.filter((s) => s.status === "active").map((s) => s.signal_type));
   const hasVolume = activeTypes.has("volume_shock") || activeTypes.has("quiet_accumulation");
   const hasPrice = activeTypes.has("price_shock");
@@ -254,7 +254,7 @@ function buildEnhancedNarrative(
     case "NORMAL":
     default:
       if (hasActive) {
-        return { title: narrativeTypeLabel(narrative.type), paragraphs: [narrative.description] };
+        return { title: locale.narrativeLabel(narrative.type), paragraphs: [narrative.description] };
       }
       if (hasHistorical) {
         return {
@@ -282,7 +282,7 @@ function buildKeyFindings(
   topSignal: Signal | null,
   locale: AssetExplanationLocale
 ): string[] {
-  const { t } = locale;
+  const { t, narrativeLabel } = locale;
   const findings: string[] = [];
 
   if (hasActive && topSignal) {
@@ -304,7 +304,7 @@ function buildKeyFindings(
       findings.push(t("asset.findingCompositeScore", { score: detail.anomaly_score }));
     }
     if (detail.narrative.type !== "NORMAL") {
-      findings.push(t("asset.findingNarrative", { narrative: narrativeTypeLabel(detail.narrative.type) }));
+      findings.push(t("asset.findingNarrative", { narrative: narrativeLabel(detail.narrative.type) }));
     }
     findings.push(t("asset.findingActive"));
   } else if (hasHistorical) {
@@ -326,7 +326,7 @@ function buildWhatChanged(
   currVolumeRatio: number | null,
   locale: AssetExplanationLocale
 ): WhatChangedRow[] {
-  const { t } = locale;
+  const { t, narrativeLabel } = locale;
   const rows: WhatChangedRow[] = [];
   const latest = snapshots.at(-1);
   const previous = snapshots.at(-2);
@@ -366,8 +366,8 @@ function buildWhatChanged(
   if (prevNarrative !== currNarrative || currNarrative !== "NORMAL") {
     rows.push({
       label: t("asset.marketNarrative"),
-      before: narrativeTypeLabel(prevNarrative),
-      after: narrativeTypeLabel(currNarrative),
+      before: narrativeLabel(prevNarrative),
+      after: narrativeLabel(currNarrative),
     });
   }
 
