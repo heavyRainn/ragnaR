@@ -5,25 +5,26 @@ export const MIN_RADIUS = 44;
 export const MAX_RADIUS = 140;
 
 export const PHYSICS = {
-  COLLISION_FORCE: 0.13,
-  DAMPING: 0.978,
-  COLLISION_GAP: 6,
-  DRIFT_IMPULSE_MIN: 0.014,
-  DRIFT_IMPULSE_MAX: 0.032,
-  DRIFT_INTERVAL_MIN_MS: 2200,
-  DRIFT_INTERVAL_MAX_MS: 4800,
-  BREATH_FORCE: 0.00085,
-  RADIUS_LERP: 0.065,
-  BOUNDS_PADDING: 8,
-  WALL_BOUNCE: 0.5,
-  MAX_SPEED: 0.38,
-  MOUSE_RADIUS: 55,
-  MOUSE_FORCE: 0.002,
+  COLLISION_FORCE: 0.2,
+  DAMPING: 0.986,
+  COLLISION_GAP: 30,
+  DRIFT_IMPULSE_MIN: 0.018,
+  DRIFT_IMPULSE_MAX: 0.038,
+  DRIFT_INTERVAL_MIN_MS: 1600,
+  DRIFT_INTERVAL_MAX_MS: 3800,
+  BREATH_FORCE: 0.0012,
+  RADIUS_LERP: 0.07,
+  BOUNDS_PADDING: 10,
+  WALL_BOUNCE: 0.55,
+  MAX_SPEED: 0.34,
+  MOUSE_RADIUS: 60,
+  MOUSE_FORCE: 0.0025,
   HOVER_PIN_STRENGTH: 0.16,
   HOVER_DAMPING: 0.04,
-  PACK_SETTLE_ITERATIONS: 520,
-  PACK_RESOLVE_PASSES: 2,
-  DISPLAY_SMOOTH: 0.11,
+  PACK_SETTLE_ITERATIONS: 900,
+  PACK_RESOLVE_PASSES: 8,
+  DISPLAY_SMOOTH: 0.14,
+  FIT_SHRINK_ATTEMPTS: 28,
 } as const;
 
 export type BubbleSentiment = "positive" | "negative" | "neutral";
@@ -41,6 +42,8 @@ export type SimBubble = {
   vx: number;
   vy: number;
   radius: number;
+  /** Radius from performance metric before viewport scaling — never mutated after build. */
+  baseRadius: number;
   targetRadius: number;
   change1h: number;
   change24h: number;
@@ -80,14 +83,11 @@ function clampSpeed(node: SimBubble): void {
 /** Cap extreme % moves so one outlier does not dominate the whole map. */
 const SIZE_PERCENT_CAP = 8;
 
-/** Final viewport multiplier per mode (1h slightly denser than 24h). */
+/** Slight mode tweak — 24h swings are wider, so bubbles can be a bit larger. */
 const MODE_RADIUS_SCALE: Record<BubbleViewMode, number> = {
-  "1h": 0.68,
-  "24h": 1.08,
+  "1h": 0.92,
+  "24h": 1,
 };
-
-/** Modest global bump — larger bubbles, same circular dynamic layout. */
-const BUBBLE_RADIUS_BOOST = 1.12;
 
 function normalizedPerfMetric(change: number): number {
   const abs = Math.min(Math.abs(change), SIZE_PERCENT_CAP);
@@ -110,29 +110,29 @@ function baseRadiusFromNormalized(t: number): number {
   return MIN_RADIUS + curved * (MAX_RADIUS - MIN_RADIUS);
 }
 
-/** Uniform scale — preserves relative bubble sizes, tuned for dense heatmap fill. */
-export function scaleRadiiToViewport(
-  nodes: SimBubble[],
-  width: number,
-  height: number,
-  viewMode: BubbleViewMode = "24h"
-): void {
-  if (nodes.length === 0) return;
+function visualPadding(radius: number): number {
+  return Math.min(18, radius * 0.1);
+}
 
-  const n = nodes.length;
-  const area = width * height;
-  const minDim = Math.min(width, height);
+function effectiveArea(radius: number): number {
+  const r = radius + PHYSICS.COLLISION_GAP * 0.5 + visualPadding(radius);
+  return Math.PI * r * r;
+}
+
+function applyRadiusScale(nodes: SimBubble[], scale: number, viewMode: BubbleViewMode): void {
   const modeScale = MODE_RADIUS_SCALE[viewMode] ?? 1;
-  const targetFill = Math.min(0.84, 0.56 + n * 0.0034);
-  const sumArea = nodes.reduce((sum, node) => sum + Math.PI * node.targetRadius * node.targetRadius, 0);
+  const combined = scale * modeScale;
 
-  const maxR = minDim * (n > 42 ? 0.18 : n > 28 ? 0.2 : 0.23);
-  const minR = minDim * (n > 42 ? 0.036 : 0.04);
-
-  const scale = Math.sqrt((area * targetFill) / (sumArea || 1));
   for (const node of nodes) {
-    node.targetRadius *= scale;
+    node.targetRadius = node.baseRadius * combined;
+    node.radius = node.targetRadius;
+    node.mass = Math.max(0.85, node.targetRadius / 38);
   }
+}
+
+function clampRadiusRange(nodes: SimBubble[], minDim: number, count: number): void {
+  const maxR = minDim * (count > 35 ? 0.082 : count > 25 ? 0.095 : 0.11);
+  const minR = minDim * (count > 35 ? 0.02 : 0.024);
 
   let maxTarget = Math.max(...nodes.map((node) => node.targetRadius));
   if (maxTarget > maxR) {
@@ -148,13 +148,44 @@ export function scaleRadiiToViewport(
     const up = Math.min(minR / minTarget, maxR / maxTarget);
     for (const node of nodes) {
       node.targetRadius *= up;
+      node.radius = node.targetRadius;
     }
   }
 
   for (const node of nodes) {
-    node.targetRadius *= modeScale * BUBBLE_RADIUS_BOOST;
     node.radius = node.targetRadius;
     node.mass = Math.max(0.85, node.targetRadius / 38);
+  }
+}
+
+function totalPackedArea(nodes: SimBubble[]): number {
+  return nodes.reduce((sum, node) => sum + effectiveArea(node.targetRadius), 0);
+}
+
+/** Idempotent viewport scale — keeps relative sizes while guaranteeing pack headroom. */
+export function scaleRadiiToViewport(
+  nodes: SimBubble[],
+  width: number,
+  height: number,
+  viewMode: BubbleViewMode = "1h"
+): void {
+  if (nodes.length === 0 || width <= 0 || height <= 0) return;
+
+  const n = nodes.length;
+  const area = width * height;
+  const minDim = Math.min(width, height);
+  const sumBaseArea = nodes.reduce((sum, node) => sum + effectiveArea(node.baseRadius), 0);
+  const targetFill = Math.min(0.27, 0.2 + n * 0.0009);
+
+  let scale = Math.sqrt((area * targetFill) / (sumBaseArea || 1));
+  applyRadiusScale(nodes, scale, viewMode);
+  clampRadiusRange(nodes, minDim, n);
+
+  for (let attempt = 0; attempt < PHYSICS.FIT_SHRINK_ATTEMPTS; attempt++) {
+    if (totalPackedArea(nodes) <= area * 0.32) break;
+    scale *= 0.96;
+    applyRadiusScale(nodes, scale, viewMode);
+    clampRadiusRange(nodes, minDim, n);
   }
 }
 
@@ -174,7 +205,7 @@ export function buildSimBubbles(
     const sym = item.asset.symbol;
     const metric = sizingMetric(item, viewMode);
     const t = (metric - min) / span;
-    const targetRadius = baseRadiusFromNormalized(t);
+    const baseRadius = baseRadiusFromNormalized(t);
     const mcap = parseFloat(item.market_cap ?? "0") || 0;
     const count = signalCounts[sym] ?? (item.anomaly_score > 0 ? 1 : 0);
 
@@ -194,8 +225,9 @@ export function buildSimBubbles(
       displayY: 0,
       vx: 0,
       vy: 0,
-      radius: targetRadius,
-      targetRadius,
+      radius: baseRadius,
+      baseRadius,
+      targetRadius: baseRadius,
       change1h,
       change24h,
       displayChange,
@@ -206,7 +238,7 @@ export function buildSimBubbles(
       marketCapStr: item.market_cap,
       mainSignal: item.main_signal,
       hasSignal: item.anomaly_score > 0,
-      mass: Math.max(0.8, targetRadius / 42),
+      mass: Math.max(0.8, baseRadius / 42),
       phase: hashPhase(sym),
       nextDriftAt: performance.now() + Math.random() * 3000,
     };
@@ -241,7 +273,25 @@ function clampInside(node: SimBubble, width: number, height: number): void {
 }
 
 function minDist(a: SimBubble, b: SimBubble): number {
-  return a.radius + b.radius + PHYSICS.COLLISION_GAP;
+  return (
+    a.radius +
+    b.radius +
+    PHYSICS.COLLISION_GAP +
+    visualPadding(a.radius) +
+    visualPadding(b.radius)
+  );
+}
+
+export function hasBubbleOverlaps(nodes: SimBubble[]): boolean {
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i];
+      const b = nodes[j];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (dist < minDist(a, b)) return true;
+    }
+  }
+  return false;
 }
 
 function overlapsPlaced(node: SimBubble, placed: SimBubble[]): boolean {
@@ -313,6 +363,14 @@ function resolveOverlaps(
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
+function fract(value: number): number {
+  return value - Math.floor(value);
+}
+
+function seededUnit(seed: number): number {
+  return fract(Math.sin(seed) * 43758.5453123);
+}
+
 function findPackedSlot(
   node: SimBubble,
   placed: SimBubble[],
@@ -321,10 +379,14 @@ function findPackedSlot(
   width: number,
   height: number
 ): boolean {
-  const gap = PHYSICS.COLLISION_GAP + 2;
-  let bestX = cx;
-  let bestY = cy;
-  let bestScore = Infinity;
+  const pad = node.radius + PHYSICS.BOUNDS_PADDING;
+  const minX = pad;
+  const maxX = width - pad;
+  const minY = pad;
+  const maxY = height - pad;
+  let bestX = Math.min(maxX, Math.max(minX, cx));
+  let bestY = Math.min(maxY, Math.max(minY, cy));
+  let bestScore = -Infinity;
   let hasBest = false;
 
   const tryCandidate = (x: number, y: number) => {
@@ -332,8 +394,18 @@ function findPackedSlot(
     node.y = y;
     clampInside(node, width, height);
     if (overlapsPlaced(node, placed)) return;
-    const score = Math.hypot(node.x - cx, node.y - cy);
-    if (!hasBest || score < bestScore) {
+
+    let nearest = Infinity;
+    for (const other of placed) {
+      nearest = Math.min(nearest, Math.hypot(node.x - other.x, node.y - other.y));
+    }
+
+    const centerDistance = Math.hypot(node.x - cx, node.y - cy) / Math.max(width, height);
+    const edgeDistance = Math.min(node.x - minX, maxX - node.x, node.y - minY, maxY - node.y);
+    const edgePenalty = edgeDistance < node.radius * 0.4 ? 60 : 0;
+    const score = (Number.isFinite(nearest) ? nearest : 0) - centerDistance * 22 - edgePenalty;
+
+    if (!hasBest || score > bestScore) {
       bestX = node.x;
       bestY = node.y;
       bestScore = score;
@@ -342,24 +414,23 @@ function findPackedSlot(
   };
 
   if (placed.length === 0) {
-    node.x = cx;
-    node.y = cy;
+    node.x = minX + seededUnit(node.phase + 1.7) * Math.max(1, maxX - minX);
+    node.y = minY + seededUnit(node.phase + 9.3) * Math.max(1, maxY - minY);
     return true;
   }
 
-  for (const anchor of placed) {
-    const orbit = anchor.radius + node.radius + gap;
-    const steps = Math.max(14, Math.ceil(orbit / 4));
-    for (let i = 0; i < steps; i++) {
-      const angle = (i / steps) * Math.PI * 2 + node.phase;
-      tryCandidate(anchor.x + Math.cos(angle) * orbit, anchor.y + Math.sin(angle) * orbit);
-    }
+  const randomAttempts = Math.min(2600, 700 + placed.length * 42);
+  for (let i = 0; i < randomAttempts; i++) {
+    const seed = node.phase * 97 + i * 13.37;
+    const x = minX + seededUnit(seed) * Math.max(1, maxX - minX);
+    const y = minY + seededUnit(seed + 4.91) * Math.max(1, maxY - minY);
+    tryCandidate(x, y);
   }
 
   const maxPlacedR = placed[0]?.radius ?? node.radius;
-  for (let i = 0; i < 5000; i++) {
+  for (let i = 0; i < 2600; i++) {
     const angle = i * GOLDEN_ANGLE + node.phase * 3;
-    const dist = maxPlacedR + node.radius + gap + i * 0.28;
+    const dist = maxPlacedR + node.radius + PHYSICS.COLLISION_GAP + i * 0.34;
     tryCandidate(cx + Math.cos(angle) * dist, cy + Math.sin(angle) * dist);
   }
 
@@ -375,16 +446,6 @@ function findPackedSlot(
 function settleLayout(nodes: SimBubble[], width: number, height: number): void {
   for (let i = 0; i < PHYSICS.PACK_SETTLE_ITERATIONS; i++) {
     resolveOverlaps(nodes, width, height, null);
-
-    const t = i / PHYSICS.PACK_SETTLE_ITERATIONS;
-    const cx = width / 2;
-    const cy = height / 2;
-    const pull = 0.0015 * (1 - t);
-    for (const node of nodes) {
-      node.x += (cx - node.x) * pull;
-      node.y += (cy - node.y) * pull;
-      clampInside(node, width, height);
-    }
   }
 
   for (const node of nodes) {
@@ -397,7 +458,7 @@ export function initPackedLayout(
   nodes: SimBubble[],
   width: number,
   height: number,
-  viewMode: BubbleViewMode = "24h"
+  viewMode: BubbleViewMode = "1h"
 ): void {
   if (width <= 0 || height <= 0 || nodes.length === 0) return;
 
@@ -410,7 +471,15 @@ export function initPackedLayout(
   const placed: SimBubble[] = [];
 
   for (const node of sorted) {
-    if (!findPackedSlot(node, placed, cx, cy, width, height)) {
+    let placedOk = findPackedSlot(node, placed, cx, cy, width, height);
+    for (let attempt = 0; attempt < 10 && !placedOk; attempt++) {
+      node.targetRadius *= 0.9;
+      node.radius = node.targetRadius;
+      node.mass = Math.max(0.85, node.targetRadius / 38);
+      placedOk = findPackedSlot(node, placed, cx, cy, width, height);
+    }
+
+    if (!placedOk) {
       node.x = cx + (Math.random() - 0.5) * width * 0.35;
       node.y = cy + (Math.random() - 0.5) * height * 0.35;
       clampInside(node, width, height);
@@ -419,14 +488,24 @@ export function initPackedLayout(
     node.radius = node.targetRadius;
     node.displayX = node.x;
     node.displayY = node.y;
-    node.vx = (Math.random() - 0.5) * 0.12;
-    node.vy = (Math.random() - 0.5) * 0.12;
+    node.vx = (Math.random() - 0.5) * 0.22;
+    node.vy = (Math.random() - 0.5) * 0.22;
     node.nextDriftAt =
       now + PHYSICS.DRIFT_INTERVAL_MIN_MS + Math.random() * PHYSICS.DRIFT_INTERVAL_MAX_MS;
     placed.push(node);
   }
 
   settleLayout(nodes, width, height);
+
+  for (let attempt = 0; attempt < 24 && hasBubbleOverlaps(nodes); attempt++) {
+    for (const node of nodes) {
+      node.targetRadius *= 0.94;
+      node.radius = node.targetRadius;
+      node.mass = Math.max(0.85, node.targetRadius / 38);
+    }
+    settleLayout(nodes, width, height);
+  }
+
   for (const node of nodes) {
     node.displayX = node.x;
     node.displayY = node.y;
@@ -589,10 +668,14 @@ export function stepPhysics(
 
     node.vx *= PHYSICS.DAMPING;
     node.vy *= PHYSICS.DAMPING;
+    clampSpeed(node);
     node.x += node.vx;
     node.y += node.vy;
-    clampSpeed(node);
     applyWallBounce(node, width, height);
+  }
+
+  for (let pass = 0; pass < PHYSICS.PACK_RESOLVE_PASSES; pass++) {
+    resolveOverlaps(nodes, width, height, hoveredId);
   }
 }
 
@@ -621,6 +704,16 @@ export function bubbleZIndex(node: SimBubble, hoveredId: string | null): number 
 
 export function settleBubbleLayout(nodes: SimBubble[], width: number, height: number): void {
   settleLayout(nodes, width, height);
+
+  for (let attempt = 0; attempt < 20 && hasBubbleOverlaps(nodes); attempt++) {
+    for (const node of nodes) {
+      node.targetRadius *= 0.95;
+      node.radius = node.targetRadius;
+      node.mass = Math.max(0.85, node.targetRadius / 38);
+    }
+    settleLayout(nodes, width, height);
+  }
+
   for (const node of nodes) {
     node.displayX = node.x;
     node.displayY = node.y;
@@ -634,7 +727,7 @@ export function resizeBubbleLayout(
   oldHeight: number,
   newWidth: number,
   newHeight: number,
-  viewMode: BubbleViewMode = "24h"
+  viewMode: BubbleViewMode = "1h"
 ): void {
   if (nodes.length === 0 || oldWidth <= 0 || oldHeight <= 0 || newWidth <= 0 || newHeight <= 0) {
     return;

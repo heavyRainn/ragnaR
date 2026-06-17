@@ -18,7 +18,7 @@ export default function AssetsPage() {
   const { data: signals } = usePolling(() => api.getSignals(), 60_000);
   const { data: systemStatus } = usePolling(() => api.getSystemStatus(), 15_000);
   const [search, setSearch] = useState("");
-  const [viewMode, setViewMode] = useState<BubbleViewMode>("24h");
+  const [viewMode, setViewMode] = useState<BubbleViewMode>("1h");
 
   const viewModes: { id: BubbleViewMode; label: string }[] = [
     { id: "1h", label: t("assets.view1h") },

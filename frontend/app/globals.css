@@ -24,12 +24,18 @@ body {
     contain: layout style;
     --bubble-d: calc(var(--bubble-r, 40) * 2px);
     --bubble-border-w: clamp(1px, calc(var(--bubble-d) * 0.01), 3px);
-    --glow-scale: clamp(0.55, calc(var(--bubble-r, 40) / 72), 1.35);
+    --glow-scale: clamp(0.45, calc(var(--bubble-r, 40) / 80), 1.1);
     --glow-boost: 1;
   }
 
+  @media (max-width: 640px) {
+    .cb-bubble-shell {
+      --glow-scale: clamp(0.35, calc(var(--bubble-r, 40) / 96), 0.85);
+    }
+  }
+
   .cb-bubble-shell[data-large="true"] {
-    --glow-scale: clamp(1, calc(var(--bubble-r, 110) / 88), 1.6);
+    --glow-scale: clamp(0.85, calc(var(--bubble-r, 110) / 96), 1.25);
   }
 
   .cb-bubble {

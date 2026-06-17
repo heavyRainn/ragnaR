@@ -18,6 +18,7 @@ import {
   mergeSimBubbles,
   resizeBubbleLayout,
   scaleRadiiToViewport,
+  settleBubbleLayout,
   smoothBubbleDisplay,
   stepPhysics,
   type SimBubble,
@@ -35,6 +36,33 @@ interface CryptoBubblesViewProps {
 const HOVER_GRACE_MS = 280;
 const CARD_SMOOTH = 0.12;
 const RESIZE_DEBOUNCE_MS = 150;
+
+function visibleBubbleLimit(
+  width: number,
+  height: number,
+  hasSearch: boolean,
+  totalAvailable: number
+): number {
+  if (hasSearch) return totalAvailable;
+  if (width <= 0 || height <= 0) return Math.min(totalAvailable, 120);
+
+  const area = width * height;
+  let cap = 138;
+  if (area < 360_000) cap = 72;
+  else if (area < 560_000) cap = 96;
+  else if (area < 840_000) cap = 120;
+
+  return Math.min(totalAvailable, cap);
+}
+
+function itemMagnitude(item: RadarItem, viewMode: BubbleViewMode): number {
+  const change =
+    viewMode === "1h"
+      ? parseFloat(item.percent_change_1h ?? "0") || 0
+      : parseFloat(item.percent_change_24h ?? "0") || 0;
+
+  return Math.abs(change) + Math.max(0, item.anomaly_score) * 0.75;
+}
 
 export function CryptoBubblesView({
   items,
@@ -61,6 +89,7 @@ export function CryptoBubblesView({
   const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [layoutReady, setLayoutReady] = useState(false);
   const [hovered, setHovered] = useState<SimBubble | null>(null);
   const [selected, setSelected] = useState<SimBubble | null>(null);
 
@@ -74,9 +103,18 @@ export function CryptoBubblesView({
     );
   }, [items, search]);
 
+  const visibleItems = useMemo(() => {
+    const hasSearch = search.trim().length > 0;
+    const limit = visibleBubbleLimit(size.width, size.height, hasSearch, filtered.length);
+
+    return [...filtered]
+      .sort((a, b) => itemMagnitude(b, viewMode) - itemMagnitude(a, viewMode))
+      .slice(0, limit);
+  }, [filtered, search, size.width, size.height, viewMode]);
+
   const bubbleDefs = useMemo(
-    () => buildSimBubbles(filtered, viewMode, signalCounts),
-    [filtered, viewMode, signalCounts]
+    () => buildSimBubbles(visibleItems, viewMode, signalCounts),
+    [visibleItems, viewMode, signalCounts]
   );
 
   const sectorList = useMemo(() => {
@@ -122,7 +160,10 @@ export function CryptoBubblesView({
   const layoutViewModeRef = useRef<BubbleViewMode>(viewMode);
 
   useEffect(() => {
-    if (size.width <= 0 || size.height <= 0 || bubbleDefs.length === 0) return;
+    if (size.width <= 0 || size.height <= 0 || bubbleDefs.length === 0) {
+      setLayoutReady(false);
+      return;
+    }
 
     const prev = nodesRef.current;
     const merged = mergeSimBubbles(prev, bubbleDefs);
@@ -156,9 +197,11 @@ export function CryptoBubblesView({
       layoutSizeRef.current = { width: size.width, height: size.height };
     } else {
       scaleRadiiToViewport(merged, size.width, size.height, viewMode);
+      settleBubbleLayout(merged, size.width, size.height);
     }
 
     nodesRef.current = merged;
+    setLayoutReady(true);
   }, [bubbleDefs, size.width, size.height, viewMode]);
 
   useEffect(() => {
@@ -308,7 +351,12 @@ export function CryptoBubblesView({
       onPointerLeave={handlePointerLeave}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_40%,rgba(59,130,246,0.06)_0%,transparent_55%)]" />
-      <div className="absolute inset-0 z-[1]">
+      <div
+        className={cn(
+          "absolute inset-0 z-[1] transition-opacity duration-300",
+          layoutReady ? "opacity-100" : "opacity-0"
+        )}
+      >
         {showSectors &&
           sectorList.map((sector) => (
             <div
