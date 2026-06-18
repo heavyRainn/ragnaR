@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.asset import Asset
 from app.models.market_snapshot import MarketSnapshot
+from app.services.demo_replay_scenarios import DEMO_REPLAY_SYMBOLS
 from app.services.market_data_service import get_last_sync_at, sync_from_coinmarketcap
 from app.services.signal_service import refresh_signals
 from app.services.sync_state import sync_state
@@ -31,6 +32,9 @@ def refresh_market_data(db: Session, *, force: bool = False) -> bool:
     inserted = 0
 
     for asset in assets:
+        if asset.symbol in DEMO_REPLAY_SYMBOLS:
+            continue
+
         latest = db.execute(
             select(MarketSnapshot)
             .where(MarketSnapshot.asset_id == asset.id)

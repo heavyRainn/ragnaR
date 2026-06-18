@@ -1,82 +1,205 @@
 # Crypto Market Intelligence Radar (CMIR)
 
-**See unusual crypto market behavior before it becomes obvious.**
+## Detect unusual crypto market behavior before it becomes obvious.
 
 CMIR is an explainable crypto intelligence terminal built on CoinMarketCap market data.
 
-Instead of only showing prices and rankings, CMIR detects unusual market behavior, explains why it matters, tracks capital rotation across sectors, and provides replay functionality to show what happened before and after a signal.
+Unlike traditional dashboards that show prices and rankings, CMIR detects unusual market behavior, explains why it matters, tracks capital rotation across sectors, and allows users to replay signals historically.
 
-> *AI does not decide signals. Deterministic market logic is the source of truth.*
+### CoinMarketCap shows what is happening.
 
-**Key principles**
+### CMIR shows what deserves attention and why.
 
-- No AI-generated trading decisions
-- No black-box models
-- Fully explainable, rule-based signals
-
----
-
-## The Problem
-
-Crypto dashboards answer:
-
-> *What is happening?*
-
-But they rarely answer:
-
-- What deserves attention?
-- Why is it unusual?
-- When did it start?
-- What happened after the signal?
-
-Traders spend hours scanning hundreds of assets, sectors, and charts.
-
-**CMIR turns raw market data into actionable market intelligence.**
+* No black-box AI
+* No automated trading decisions
+* Fully explainable deterministic signals
+* Replayable market events
+* Capital Rotation Intelligence
 
 ---
 
-## Solution
+# Built for CoinMarketCap API Hackathon
 
-CMIR combines:
+CMIR continuously analyzes CoinMarketCap Top 100 assets and transforms raw market data into explainable intelligence.
 
-- CoinMarketCap Top 100 market data
-- Bybit minute-level history
-- Deterministic Signal Engine
-- Sector Intelligence
-- Capital Rotation
-- Replay Engine
+CoinMarketCap provides:
 
-### Pipeline
+* Prices
+* Market Cap
+* Rankings
+* 1H / 24H Performance
 
-```mermaid
-flowchart LR
-    subgraph Sources["Data Sources"]
-        CMC[CoinMarketCap<br/>Top 100]
-        Bybit[Bybit<br/>1m history]
-    end
+CMIR adds:
 
-    subgraph Core["Processing"]
-        Snap[Market Snapshots]
-        SE[Signal Engine]
-        NE[Narrative Engine]
-    end
+* Anomaly Detection
+* Capital Rotation
+* Sector Intelligence
+* Historical Replay
+* Explainable Narratives
 
-    subgraph UI["Intelligence Layer"]
-        Radar[Radar Terminal]
-        Map[Market Map]
-        Sectors[Sector Intelligence]
-        Replay[Replay Engine]
-    end
+---
 
-    CMC --> Snap
-    Bybit --> Snap
-    Snap --> SE
-    SE --> NE
-    NE --> Radar
-    NE --> Map
-    NE --> Sectors
-    NE --> Replay
-```
+# Demo Screenshots
+
+## Market Intelligence Terminal
+
+<p align="center">
+  <img src="screenshots/radar-terminal.png" alt="Market Intelligence Terminal" width="900" />
+</p>
+
+Shows the highest-priority active anomalies immediately.
+
+Critical events appear first, followed by opportunities, capital rotation, and market intelligence.
+
+---
+
+## Top Opportunities & Opportunity Feed
+
+<p align="center">
+  <img src="screenshots/opportunities-feed.png" alt="Top Opportunities and Opportunity Feed" width="900" />
+</p>
+
+Highlights the strongest opportunities based on Radar Score and active anomaly signals.
+
+Users immediately see:
+
+* strongest assets
+* signal type
+* score
+* sector
+* detection time
+
+---
+
+## Capital Rotation & Market Story
+
+<p align="center">
+  <img src="screenshots/capital-rotation.png" alt="Capital Rotation and Market Story" width="900" />
+</p>
+
+Shows where capital is moving right now.
+
+Example:
+
+> Capital rotating into RWA while AI weakens.
+
+This transforms raw sector performance into a readable market narrative.
+
+---
+
+## Signal Replay
+
+<p align="center">
+  <img src="screenshots/replay.png" alt="Signal Replay" width="900" />
+</p>
+
+Replay historical snapshots and inspect:
+
+* Before Signal
+* Signal Detected
+* Current State
+
+Replay proves that CMIR detected unusual behavior before it became obvious.
+
+---
+
+## Asset Intelligence — Active Signal
+
+<p align="center">
+  <img src="screenshots/asset-active-signal.png" alt="Asset Intelligence active signal" width="900" />
+</p>
+
+Deep dive into a live anomaly.
+
+Users can inspect:
+
+* Why Radar flagged the asset
+* Current score
+* Signal explanation
+* Price and volume context
+
+---
+
+## Asset Intelligence — Historical Signals
+
+<p align="center">
+  <img src="screenshots/asset-history.png" alt="Asset Intelligence historical signals" width="900" />
+</p>
+
+Historical signals remain visible even after resolution.
+
+Users can answer:
+
+> Why was this asset flagged?
+
+at any time.
+
+---
+
+## Market Map
+
+<p align="center">
+  <img src="screenshots/market-map.png" alt="Market Map" width="900" />
+</p>
+
+Interactive crypto heatmap for Top 100 assets.
+
+Features:
+
+* 1H / 24H modes
+* Physics-based layout
+* Intelligence overlays
+* Asset drilldown
+
+---
+
+# Why CMIR Exists
+
+Most crypto dashboards answer:
+
+> What is happening?
+
+CMIR answers:
+
+| Question | CMIR |
+| -------- | ---- |
+| What deserves attention? | Prioritized signals |
+| Why is it unusual? | Explainable metrics |
+| When did it start? | Historical replay |
+| What happened after? | Signal outcome tracking |
+| Where is capital moving? | Sector intelligence |
+
+---
+
+# What Makes CMIR Different?
+
+<p align="center">
+  <img src="docs/diagrams/cmc-vs-cmir.png" alt="CoinMarketCap vs CMIR" width="880" />
+</p>
+
+---
+
+# Product Overview
+
+<p align="center">
+  <img src="docs/diagrams/product-layers.png" alt="Five intelligence layers" width="920" />
+</p>
+
+| Layer | Purpose |
+| ----- | ------- |
+| Radar Terminal | Market-wide intelligence |
+| Market Map | Visual exploration |
+| Asset Intelligence | Explainable anomaly analysis |
+| Replay Engine | Historical verification |
+| Sector Intelligence | Capital flow tracking |
+
+---
+
+# Data Pipeline
+
+<p align="center">
+  <img src="docs/diagrams/pipeline.png" alt="CMIR data pipeline" width="920" />
+</p>
 
 ```
 CoinMarketCap + Bybit
@@ -87,323 +210,170 @@ Signal Engine
         ↓
 Narrative Engine
         ↓
-Radar Terminal · Market Map · Sector Intelligence · Replay
+Radar · Replay · Market Map · Sector Intelligence
 ```
 
 ---
 
-## Key Features
+# Signal Engine
 
-### Radar Terminal (`/radar`)
+CMIR uses deterministic rules instead of machine learning.
 
-The command center for market-wide intelligence.
+## Volume Shock
 
-- **Market Overview** — KPIs: assets, signals, avg score, critical count, market mode
-- **Market Story** — rule-based narrative: capital rotation, sector signals, score delta
-- **Capital Rotation** — sector leaders and laggards; click through to drilldown
-- **Top Opportunities** — highest Radar Score assets
-- **Opportunity Feed** — latest and strongest signals with quick asset links
-- **Recent Market Events** — active and resolved signals with post-signal price move
-- **Intelligence Feed** — stream of active anomalies
-- **Radar Table** — search, filters, sort across Top 100
+Detects abnormal volume expansion.
 
-### Market Map (`/assets`)
+Trigger:
 
-Interactive bubble map for Top 100 tradable assets (stablecoins excluded).
+`volume_ratio >= 3x`
 
-- **1H / 24H modes** — bubble size and color driven by price change
-- **Physics-based layout** — dynamic movement with collision detection
-- **Sector exploration** — optional sector heat layers
-- **Intelligence cards** — hover for 1h/24h change, price, market cap, Radar Score
-- **Asset modal** — click a bubble for detail, stats, and mini chart
+## Price Shock
 
-### Asset Intelligence (`/assets/[symbol]`)
+Detects abnormal price movement using z-score analysis.
 
-Deep dive for every asset:
+Trigger:
 
-- **Why Radar Flagged** — explanation with real numbers (z-score, volume ratio)
-- **Signal History** — resolved signals with outcome, duration, replay links
-- **Signal Outcome** — results of closed signals
-- **Key Findings & What Changed** — score delta, narrative, volume ratio
-- **Replay** — jump to historical signal context
-- **Price & Volume charts** — detection markers on timeline
+`|z-score| >= 3`
 
-### Replay (`/replay`)
+## Quiet Accumulation
 
-Time machine for market signals.
+Detects volume growth while price remains relatively flat.
 
-Jump directly to:
+Trigger:
 
-- **Before Signal**
-- **Signal Detected**
-- **Current State**
+`volume_ratio >= 3x` AND `|24h change| <= 2%`
 
-Use `?signal_id=` to jump to a specific historical signal.
+## Radar Score
 
-Replay demonstrates how early the system detected unusual market behavior — not just what happened after the fact.
+Composite score:
 
-### Sector Intelligence
+* Volume Shock
+* Price Shock
+* Quiet Accumulation
 
-- **Capital Rotation** — where money is moving across sectors
-- **Sector Drilldown** (`/sectors/[sector]`) — score, narrative, top assets, active signals
-- **Sector Replay** (`/replay/sector/[sector]`) — sector score evolution over snapshots
-- **Market Story** — cross-sector narrative on the Radar terminal
+Output:
 
-### Localization
-
-- **English / Russian** — navbar toggle, browser auto-detect, `localStorage` persistence
-- UI, signal types, sectors, and narrative strings translated on the client
+* Score
+* Severity
+* Narrative
+* Lifecycle
 
 ---
 
-## Signal Engine
+# Replay Engine
 
-CMIR uses **deterministic rules**, not ML. Minimum **15 snapshots** of history. Lifecycle: `active` → `resolved`.
+Most anomaly systems generate alerts.
 
-### Volume Shock
-
-Volume significantly exceeds baseline (20 previous snapshots). In live mode, **1-minute Bybit turnover** is used — not mixed with CMC 24h volume.
-
-| Condition | `volume_ratio >= 3.0` |
-|-----------|------------------------|
-| Score | `min(100, round(max(0, ratio − 3) × 20 + 40))` |
-
-### Price Shock
-
-Return z-score exceeds threshold.
-
-| Condition | `\|z_score\| >= 3.0`, std >= 0.001 |
-
-### Quiet Accumulation
-
-Volume increases while price remains flat.
-
-| Condition | `volume_ratio >= 3.0` AND `\|24h %\| <= 2.0` |
-
-### Radar Score (Composite)
-
-| Component | Weight |
-|-----------|--------|
-| Volume Shock | 0.35 |
-| Price Shock | 0.30 |
-| Quiet Accumulation | 0.35 |
-
-### Narrative Engine
-
-| Active signals | Narrative |
-|----------------|-----------|
-| Quiet Accumulation | ACCUMULATION |
-| Volume + Price | MOMENTUM_EXPANSION |
-| Price only | VOLATILITY_EVENT |
-| Volume only | VOLUME_ANOMALY |
-| None active | NORMAL |
-
-**Outputs:** Radar Score · Severity · Narrative · Signal Lifecycle
-
----
-
-## Why It Is Different
-
-| Traditional Dashboard | CMIR |
-|-----------------------|------|
-| Prices | **Signals** |
-| Rankings | **Intelligence** |
-| Market data | **Capital Rotation** |
-| Charts | **Replay** |
-| What happened | **Why it matters** |
-| Black box | **Explainable rules** |
-
----
-
-## Architecture
-
-```mermaid
-flowchart TB
-    subgraph Data
-        CMC[CoinMarketCap API Top 100]
-        Bybit[Bybit 1m klines]
-        Mock[Mock Seed]
-    end
-
-    subgraph Backend["Backend · FastAPI"]
-        Sync[Background Sync 60s]
-        Backfill[Bybit Backfill]
-        DB[(PostgreSQL)]
-        SE[Signal Engine]
-        NE[Narrative Engine]
-        IL[Intelligence Layer]
-        Sync --> DB
-        Backfill --> DB
-        DB --> SE
-        SE --> NE
-        NE --> IL
-    end
-
-    subgraph Frontend["Frontend · Next.js 14"]
-        Landing[Landing /]
-        Radar[Terminal /radar]
-        Sectors[Sector /sectors]
-        SectorReplay[Sector Replay]
-        Map[Market Map /assets]
-        Asset[Asset Card]
-        Replay[Replay /replay]
-        I18n[EN / RU i18n]
-    end
-
-    CMC --> Sync
-    Bybit --> Backfill
-    Mock --> DB
-    IL --> Radar
-    IL --> Sectors
-    IL --> SectorReplay
-    NE --> Asset
-    NE --> Replay
-```
-
----
-
-## Tech Stack
-
-| Layer | Technologies |
-|-------|--------------|
-| **Frontend** | Next.js 14, TypeScript, Tailwind CSS, Recharts |
-| **Backend** | Python 3.12, FastAPI, SQLAlchemy 2, Pydantic v2, Alembic |
-| **Database** | PostgreSQL 16 |
-| **Infrastructure** | Docker Compose |
-| **Data sources** | CoinMarketCap `listings/latest` (Top 100) · Bybit turnover (live) or seed (mock) |
-
----
-
-## Run Locally
-
-### Quick start (mock mode — no API keys)
-
-```bash
-cp .env.example .env
-docker compose up --build
-```
-
-Full database reset + seed:
-
-```bash
-docker compose down -v
-docker compose up --build
-```
-
-| Service | URL |
-|---------|-----|
-| **Frontend** | http://localhost:3000 |
-| **Radar Terminal** | http://localhost:3000/radar |
-| **Market Map** | http://localhost:3000/assets |
-| **Asset (demo)** | http://localhost:3000/assets/SOL |
-| **Replay** | http://localhost:3000/replay?symbol=SOL |
-| **Sector (demo)** | http://localhost:3000/sectors/DeFi |
-| **Sector Replay** | http://localhost:3000/replay/sector/DeFi |
-| **Backend / Swagger** | http://localhost:8000/docs |
-
-Mock mode works without API keys — ideal for demos and judging.
-
-### Live mode (CoinMarketCap + Bybit)
-
-```env
-CMC_API_KEY=your_key_here
-CMC_LISTINGS_LIMIT=100
-CMC_SYNC_INTERVAL_SECONDS=60
-BYBIT_BACKFILL_ENABLED=true
-```
-
-Get a CMC key: https://coinmarketcap.com/api/
-
-Dashboard badge: `LIVE DATA · CoinMarketCap · Top 100`
-
----
-
-## Demo Flow
-
-```mermaid
-flowchart TD
-    A[Open Radar Terminal] --> B[Review Capital Rotation]
-    B --> C[Open Top Opportunity]
-    C --> D[Explore Asset Intelligence]
-    D --> E[Open Replay]
-    E --> F[Review Signal Outcome]
-    F --> G[Explore Bubble Map]
-```
-
-| Step | URL | What to show |
-|------|-----|--------------|
-| 1 | http://localhost:3000/radar | Market Story → Capital Rotation → Top Opportunities |
-| 2 | http://localhost:3000/sectors/DeFi | Sector drilldown: score, narrative, signals |
-| 3 | http://localhost:3000/assets/SOL | Why Flagged, Signal History, charts with markers |
-| 4 | http://localhost:3000/replay?symbol=SOL | Timeline before the price move |
-| 5 | http://localhost:3000/replay?symbol=SOL&signal_id=1 | Replay a specific historical signal |
-| 6 | http://localhost:3000/assets | Bubble map — 1H / 24H, physics, intelligence cards |
-| 7 | http://localhost:3000/replay/sector/DeFi | Sector score evolution over time |
-
----
-
-## API
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/system/status` | Data source, sync interval, freshness |
-| GET | `/api/radar` | Assets ranked by Radar Score + narrative |
-| GET | `/api/signals` | Active signals |
-| GET | `/api/signals/recent` | Recent market events with price move |
-| GET | `/api/market-rotation` | Capital rotation by sector |
-| GET | `/api/market-story` | Rule-based market story |
-| GET | `/api/opportunities` | Latest / strongest signals |
-| GET | `/api/sectors/{sector}` | Sector drilldown |
-| GET | `/api/assets/{symbol}` | Detail, breakdown, timeline, `historical_signals[]` |
-| GET | `/api/assets/{symbol}/snapshots` | Snapshot history (price, volume) |
-| GET | `/api/replay/{symbol}` | Historical replay; `?signal_id=` for jump |
-| GET | `/api/replay/sector/{sector}` | Sector score timeline + narrative |
-
----
-
-## Project Structure
-
-```
-ragnaR/
-├── backend/
-│   ├── app/
-│   │   ├── signals/          # Volume / Price / Quiet + volume_metrics
-│   │   ├── services/         # CMC sync, Bybit backfill, narrative, sector intelligence
-│   │   └── api/routes/       # REST endpoints
-│   └── alembic/
-├── frontend/
-│   ├── app/                  # /, /radar, /assets, /replay, /sectors
-│   ├── components/           # Terminal UI, bubbles, charts, intelligence blocks
-│   └── lib/i18n/             # EN / RU dictionaries
-├── docker-compose.yml
-└── .env.example
-```
-
----
-
-## Roadmap
-
-- [x] Sector Drilldown + Sector Replay
-- [x] Market Story + Opportunity Feed
-- [x] Signal History + replay by `signal_id`
-- [x] Bubble map Top 100 (1H / 24H)
-- [ ] Real-time WebSocket feed
-- [ ] Alerts (Telegram / email)
-- [ ] Watchlists
-- [ ] Multi-exchange support
-- [ ] Optional LLM summaries *on top of* deterministic signals (summarize, not decide)
-
----
-
-## CoinMarketCap Hackathon
-
-Built for the **CoinMarketCap API Hackathon**.
-
-CMIR demonstrates how market data can be transformed into explainable intelligence, sector analytics, and replayable market events — without hiding the logic behind a black box.
-
----
+CMIR generates explainable historical evidence.
 
 <p align="center">
-  <strong>Crypto Market Intelligence Radar</strong><br/>
-  Detect unusual crypto market behavior before it becomes obvious.
+  <img src="docs/diagrams/replay-lifecycle.png" alt="Replay lifecycle" width="880" />
 </p>
+
+Users can verify:
+
+* what happened before detection
+* when the anomaly appeared
+* how the score evolved
+* what happened after
+
+---
+
+# Sector Intelligence
+
+Features:
+
+* Capital Rotation
+* Sector Drilldown
+* Sector Replay
+* Market Story
+
+Routes:
+
+`/sectors/[sector]`
+
+`/replay/sector/[sector]`
+
+---
+
+# Architecture
+
+<p align="center">
+  <img src="docs/diagrams/architecture.png" alt="CMIR system architecture" width="920" />
+</p>
+
+---
+
+# Tech Stack
+
+**Frontend**
+
+* Next.js 14
+* TypeScript
+* Tailwind
+* Recharts
+
+**Backend**
+
+* FastAPI
+* SQLAlchemy 2
+* Pydantic v2
+
+**Database**
+
+* PostgreSQL 16
+
+**Infrastructure**
+
+* Docker Compose
+
+**Data**
+
+* CoinMarketCap
+* Bybit
+
+---
+
+# Judge Demo Flow
+
+Recommended 2-minute demo:
+
+1. Open Radar
+2. Inspect Critical Signals
+3. Open Asset Intelligence
+4. View Signal History
+5. Open Replay
+6. Verify detection timeline
+7. Explore Capital Rotation
+8. Open Market Map
+
+**Result:** CMIR demonstrates how market data becomes explainable market intelligence.
+
+---
+
+# Roadmap
+
+* Sector Replay
+* Historical Signal Outcomes
+* Market Story
+* Bubble Map
+* WebSocket Live Feed
+* Alerts
+* Watchlists
+* Multi-Exchange Support
+* Optional LLM Summaries
+
+---
+
+# CoinMarketCap Hackathon
+
+CMIR transforms CoinMarketCap market data into explainable intelligence.
+
+Instead of showing only prices, CMIR explains:
+
+* what matters
+* why it matters
+* when it started
+* what happened next
+
+All without black-box decision making.

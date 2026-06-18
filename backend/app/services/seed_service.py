@@ -7,28 +7,16 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.asset import Asset
 from app.models.market_snapshot import MarketSnapshot
-from app.services.sector_mapping import resolve_sector
-from app.services.seed_data import (
-    ANCHOR_PRICES,
-    SEED_ASSETS,
-    VOLUME_SHOCK_MULTIPLIERS,
+from app.services.demo_replay_scenarios import (
+    SEED_SNAPSHOT_COUNT,
+    SNAPSHOT_INTERVAL_HOURS,
+    apply_price_return,
+    build_snapshot_specs,
 )
+from app.services.demo_signal_alignment import align_demo_signal_timestamps
+from app.services.sector_mapping import resolve_sector
+from app.services.seed_data import ANCHOR_PRICES, SEED_ASSETS
 from app.services.signal_service import refresh_signals
-
-SEED_SNAPSHOT_COUNT = 25
-PRICE_SHOCK_ASSETS = {"SOL", "NEAR", "INJ", "APT", "SUI"}
-QUIET_ACCUMULATION_ASSETS = {"LINK", "TON", "ARB", "OP", "LDO"}
-
-
-def _symbol_hash(symbol: str) -> int:
-    return sum(ord(c) for c in symbol)
-
-
-def _default_pct_change(symbol: str, rank: int) -> Decimal:
-    h = _symbol_hash(symbol)
-    base = ((h % 23) - 11) * 0.28
-    rank_adj = (rank % 7 - 3) * 0.15
-    return Decimal(str(round(base + rank_adj, 2)))
 
 
 def _base_volume(rank: int) -> Decimal:
@@ -73,54 +61,36 @@ def seed_database(db: Session) -> None:
 
         base_price = Decimal(ANCHOR_PRICES.get(symbol, "1.00"))
         base_volume = _base_volume(rank)
-        mcap = _market_cap(rank, base_price)
-        default_pct = _default_pct_change(symbol, rank)
+        specs = build_snapshot_specs(symbol, rank, SEED_SNAPSHOT_COUNT)
 
         current_price = base_price
-        prev_price = base_price
-
-        for i in range(SEED_SNAPSHOT_COUNT):
-            captured_at = now - timedelta(hours=4 * (SEED_SNAPSHOT_COUNT - 1 - i))
-            is_latest = i == SEED_SNAPSHOT_COUNT - 1
-
-            if is_latest and symbol in PRICE_SHOCK_ASSETS:
-                current_price = (prev_price * Decimal("1.085")).quantize(Decimal("0.00000001"))
-            elif not is_latest:
-                step_pct = Decimal(str(0.0015 * ((i * 5 + _symbol_hash(symbol)) % 7 - 3)))
-                current_price = (prev_price * (Decimal("1") + step_pct)).quantize(Decimal("0.00000001"))
-            else:
-                step_pct = Decimal(str(0.001 * (i % 3 - 1)))
-                current_price = (prev_price * (Decimal("1") + step_pct)).quantize(Decimal("0.00000001"))
-
-            volume_multiplier = 1.0 + (i % 5) * 0.02
-            if is_latest and symbol in VOLUME_SHOCK_MULTIPLIERS:
-                volume_multiplier = VOLUME_SHOCK_MULTIPLIERS[symbol]
-            elif is_latest and symbol in QUIET_ACCUMULATION_ASSETS:
-                volume_multiplier = 4.0
-
-            volume = base_volume * Decimal(str(volume_multiplier))
-
-            if is_latest and symbol in QUIET_ACCUMULATION_ASSETS:
-                pct_24h = Decimal("0.80") if symbol == "LINK" else Decimal("1.10")
-            elif is_latest and symbol in PRICE_SHOCK_ASSETS:
-                pct_24h = Decimal("8.50")
-            else:
-                pct_24h = default_pct + Decimal(str(0.05 * (i % 4 - 2)))
-                pct_24h = pct_24h.quantize(Decimal("0.01"))
-
-            snapshot = MarketSnapshot(
-                asset_id=asset.id,
-                price=current_price,
-                volume_24h=volume,
-                market_cap=mcap,
-                percent_change_1h=Decimal(str(round(float(pct_24h) * 0.12, 2))),
-                percent_change_24h=pct_24h,
-                percent_change_7d=Decimal(str(round(float(pct_24h) * 2.2, 2))),
-                cmc_rank=rank,
-                captured_at=captured_at,
+        for index, spec in enumerate(specs):
+            captured_at = now - timedelta(
+                hours=SNAPSHOT_INTERVAL_HOURS * (SEED_SNAPSHOT_COUNT - 1 - index)
             )
-            db.add(snapshot)
-            prev_price = current_price
+            if index == 0:
+                current_price = base_price
+            else:
+                current_price = apply_price_return(current_price, spec.price_return)
+
+            volume = (base_volume * Decimal(str(spec.volume_multiplier))).quantize(Decimal("1"))
+            pct_24h = Decimal(str(round(spec.percent_change_24h, 2)))
+            pct_1h = Decimal(str(round(float(pct_24h) * 0.12, 2)))
+
+            db.add(
+                MarketSnapshot(
+                    asset_id=asset.id,
+                    price=current_price,
+                    volume_24h=volume,
+                    market_cap=_market_cap(rank, current_price),
+                    percent_change_1h=pct_1h,
+                    percent_change_24h=pct_24h,
+                    percent_change_7d=Decimal(str(round(float(pct_24h) * 2.1, 2))),
+                    cmc_rank=rank,
+                    captured_at=captured_at,
+                )
+            )
 
     db.commit()
     refresh_signals(db)
+    align_demo_signal_timestamps(db)

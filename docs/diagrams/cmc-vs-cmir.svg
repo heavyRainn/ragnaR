@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 300" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="440" y1="0" x2="440" y2="300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1017"/>
+      <stop offset="1" stop-color="#070A0F"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="880" height="300" rx="16" fill="url(#bg)"/>
+  <rect x="1" y="1" width="878" height="298" rx="15" stroke="#1E293B" stroke-width="1.5"/>
+
+  <text x="440" y="34" text-anchor="middle" fill="#64748B" font-family="Segoe UI, Inter, sans-serif" font-size="11" letter-spacing="0.18em">WHAT MAKES CMIR DIFFERENT</text>
+
+  <rect x="40" y="58" width="360" height="36" rx="8" fill="#1E293B"/>
+  <text x="220" y="81" text-anchor="middle" fill="#94A3B8" font-size="13" font-weight="600" font-family="Segoe UI, Inter, sans-serif">CoinMarketCap</text>
+  <rect x="480" y="58" width="360" height="36" rx="8" fill="#1D4ED8" fill-opacity="0.25" stroke="#3B82F6" stroke-opacity="0.5"/>
+  <text x="660" y="81" text-anchor="middle" fill="#93C5FD" font-size="13" font-weight="600" font-family="Segoe UI, Inter, sans-serif">CMIR</text>
+
+  <g font-family="Segoe UI, Inter, sans-serif" font-size="12">
+    <text x="60" y="124" fill="#64748B">Prices &amp; rankings</text>
+    <text x="820" y="124" text-anchor="end" fill="#E2E8F0" font-weight="600">Market intelligence</text>
+    <line x1="40" y1="134" x2="840" y2="134" stroke="#1E293B"/>
+
+    <text x="60" y="158" fill="#64748B">Charts</text>
+    <text x="820" y="158" text-anchor="end" fill="#E2E8F0" font-weight="600">Signal replay</text>
+    <line x1="40" y1="168" x2="840" y2="168" stroke="#1E293B"/>
+
+    <text x="60" y="192" fill="#64748B">Market data</text>
+    <text x="820" y="192" text-anchor="end" fill="#E2E8F0" font-weight="600">Capital rotation</text>
+    <line x1="40" y1="202" x2="840" y2="202" stroke="#1E293B"/>
+
+    <text x="60" y="226" fill="#64748B">What happened</text>
+    <text x="820" y="226" text-anchor="end" fill="#E2E8F0" font-weight="600">Why it matters</text>
+    <line x1="40" y1="236" x2="840" y2="236" stroke="#1E293B"/>
+
+    <text x="60" y="260" fill="#64748B">No signal history</text>
+    <text x="820" y="260" text-anchor="end" fill="#86EFAC" font-weight="600">Replayable signal lifecycle</text>
+  </g>
+
+  <text x="440" y="288" text-anchor="middle" fill="#64748B" font-family="Segoe UI, Inter, sans-serif" font-size="10">CoinMarketCap shows what is happening � CMIR shows what deserves attention and why</text>
+</svg>

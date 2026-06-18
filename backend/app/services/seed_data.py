@@ -50,7 +50,8 @@ SEED_ASSETS = [
     {"symbol": "LDO", "name": "Lido DAO", "slug": "lido-dao", "rank": 47, "cmc_id": 8000},
     {"symbol": "ENA", "name": "Ethena", "slug": "ethena", "rank": 48, "cmc_id": 30281},
     {"symbol": "JUP", "name": "Jupiter", "slug": "jupiter", "rank": 49, "cmc_id": 29210},
-    {"symbol": "PYTH", "name": "Pyth Network", "slug": "pyth-network", "rank": 50, "cmc_id": 28177},
+    {"symbol": "KAS", "name": "Kaspa", "slug": "kaspa", "rank": 50, "cmc_id": 20363},
+    {"symbol": "BONK", "name": "Bonk", "slug": "bonk", "rank": 51, "cmc_id": 23095},
 ]
 
 # Volume Shock demo: latest snapshot volume >= 3x baseline
@@ -141,5 +142,6 @@ ANCHOR_PRICES: dict[str, str] = {
     "LDO": "2.05",
     "ENA": "0.9200",
     "JUP": "1.12",
-    "PYTH": "0.3850",
+    "KAS": "0.1180",
+    "BONK": "0.00002410",
 }

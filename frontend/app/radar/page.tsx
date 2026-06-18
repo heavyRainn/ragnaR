@@ -9,6 +9,7 @@ import { MarketStoryBlock } from "@/components/radar/market-story";
 import { OpportunityFeed } from "@/components/radar/opportunity-feed";
 import { RadarTableControls } from "@/components/radar/radar-table-controls";
 import { RecentMarketEvents } from "@/components/radar/recent-market-events";
+import { TopActiveSignals } from "@/components/radar/top-active-signals";
 import { TopOpportunities } from "@/components/radar/top-opportunities";
 import { DataSourceBadge } from "@/components/ui/data-source-badge";
 import { FreshnessSyncBadge } from "@/components/ui/freshness-sync-badge";
@@ -77,9 +78,10 @@ export default function RadarPage() {
         {items && (
           <>
             <MarketOverview items={items} signals={signals ?? []} />
+            <TopActiveSignals signals={signals ?? []} />
+            <TopOpportunities items={items} />
             {marketStory && <MarketStoryBlock story={marketStory} />}
             {marketRotation && <CapitalRotation data={marketRotation} />}
-            <TopOpportunities items={items} />
             {opportunities && <OpportunityFeed items={opportunities} />}
             {recentEvents && <RecentMarketEvents events={recentEvents} />}
             <IntelligenceFeed signals={signals ?? []} />

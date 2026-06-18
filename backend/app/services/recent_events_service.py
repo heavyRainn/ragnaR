@@ -75,7 +75,7 @@ def get_default_replay_symbol(db: Session) -> str:
     if resolved and resolved.asset:
         return resolved.asset.symbol
 
-    for fallback in ("SOL", "BTC"):
+    for fallback in ("KAS", "SOL", "LINK", "PEPE", "BTC"):
         asset = db.execute(
             select(Asset).where(Asset.symbol == fallback, Asset.is_active.is_(True))
         ).scalar_one_or_none()
